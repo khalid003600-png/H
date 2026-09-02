@@ -14,13 +14,9 @@
 
 يفعّل أي دفع إلى `main` مسار **Build WolFox 1.8.2** تلقائياً. ويمكن تشغيله يدوياً من تبويب Actions مع إدخال Bundle IDs مفصولة بفواصل. بعد النجاح ستظهر الحزم في قسم Artifacts الخاص بالتشغيل.
 
-لربط خادم التراخيص من دون نشر الإعدادات، أضف السرّين التاليين من
-`Settings → Secrets and variables → Actions`:
-
-- `WOLFOX_PANEL_BASE_URL`
-- `WOLFOX_PROJECT_KEY`
-
-إذا لم يُضبطا فسيكتمل البناء، لكن اتصال لوحة التراخيص يبقى معطلاً.
+خادم التراخيص مضبوط على `https://gps.p3nd.fun/api/v1`. قبل البناء أضف
+`WOLFOX_PROJECT_KEY` من `Settings → Secrets and variables → Actions`.
+لا تحفظ مفتاح المشروع في المستودع العام؛ سيتوقف البناء بوضوح إذا كان Secret غير مضبوط.
 
 ## البناء على Ubuntu
 

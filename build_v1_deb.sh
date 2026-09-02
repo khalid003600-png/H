@@ -282,7 +282,7 @@ escape_objc_string() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-PANEL_BASE_URL_VALUE="${WOLFOX_PANEL_BASE_URL:-https://wolfox.bitsyscore.com/api/v1}"
+PANEL_BASE_URL_VALUE="${WOLFOX_PANEL_BASE_URL:-https://gps.p3nd.fun/api/v1}"
 PROJECT_KEY_VALUE="${WOLFOX_PROJECT_KEY:-}"
 PROJECT_BUNDLE_ID_VALUE="${WOLFOX_PROJECT_BUNDLE_ID:-com.wolfox.gpspro}"
 

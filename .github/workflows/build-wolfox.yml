@@ -89,7 +89,7 @@ jobs:
       - name: Build signed Rootful and Rootless packages
         env:
           MANUAL_BUNDLE_IDS: ${{ inputs.bundle_ids }}
-          WOLFOX_PANEL_BASE_URL: https://wolfox.bitsyscore.com/api/v1
+          WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
           WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
         run: |
           BUNDLE_IDS="${MANUAL_BUNDLE_IDS:-sa.gov.moia.mosques-2}"

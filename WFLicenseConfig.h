@@ -6,7 +6,7 @@
 #define WF_LICENSE_CONFIG_H
 
 #ifndef WF_PANEL_BASE_URL
-#define WF_PANEL_BASE_URL @"https://wolfox.bitsyscore.com/api/v1"
+#define WF_PANEL_BASE_URL @"https://gps.p3nd.fun/api/v1"
 #endif
 
 #ifndef WF_PROJECT_KEY
