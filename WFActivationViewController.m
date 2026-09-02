@@ -17,8 +17,6 @@
 @property (nonatomic, strong) UILabel *timerLabel;
 @property (nonatomic, strong) UILabel *waitLabel;
 @property (nonatomic, strong) UIImageView *lockIcon;
-@property (nonatomic, strong) NSTimer *activationTimer;
-@property (nonatomic, assign) NSInteger countdown;
 @end
 
 @implementation WFActivationViewController
@@ -29,6 +27,7 @@
     
     // Tap to dismiss keyboard
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
+    tap.cancelsTouchesInView = NO;
     [self.view addGestureRecognizer:tap];
     
     // Notifications for keyboard
@@ -129,6 +128,10 @@
     self.codeField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.codeField.placeholder attributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:0.40 alpha:1.0]}];
     self.codeField.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
     self.codeField.autocorrectionType = UITextAutocorrectionTypeNo;
+    self.codeField.keyboardType = UIKeyboardTypeASCIICapable;
+    self.codeField.smartDashesType = UITextSmartDashesTypeNo;
+    self.codeField.smartQuotesType = UITextSmartQuotesTypeNo;
+    self.codeField.textContentType = UITextContentTypeOneTimeCode;
     self.codeField.textAlignment = NSTextAlignmentCenter;
     self.codeField.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightBlack];
     self.codeField.delegate = self;
@@ -223,8 +226,9 @@
     self.timerLabel = [UILabel new];
     self.timerLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.timerLabel.textColor = [UIColor colorWithRed:0.08 green:0.45 blue:0.98 alpha:1.0];
-    self.timerLabel.font = [UIFont systemFontOfSize:64 weight:UIFontWeightBlack];
+    self.timerLabel.font = [UIFont systemFontOfSize:38 weight:UIFontWeightBlack];
     self.timerLabel.textAlignment = NSTextAlignmentCenter;
+    self.timerLabel.text = @"•••";
     [self.loadingOverlay addSubview:self.timerLabel];
 
     self.cardCenterY = [card.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor];
@@ -294,13 +298,10 @@
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    [_activationTimer invalidate];
 }
 
 - (void)closePressed {
     [self.view endEditing:YES];
-    [self.activationTimer invalidate];
-    self.activationTimer = nil;
     self.statusLabel.hidden = YES;
     self.statusLabel.text = @"";
     [self dismissViewControllerAnimated:YES completion:nil];
@@ -316,7 +317,7 @@
         [self showActivationError:@"الحافظة فارغة؛ انسخ كود التفعيل ثم حاول مرة أخرى."];
         return;
     }
-    self.codeField.text = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    self.codeField.text = [[text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
     self.statusLabel.hidden = YES;
     self.statusLabel.text = @"";
     [self.codeField becomeFirstResponder];
@@ -364,32 +365,15 @@
         return;
     }
 
-    [self.activationTimer invalidate];
-    self.activationTimer = nil;
     self.activateButton.enabled = NO;
+    [self.activateButton setTitle:@"جارٍ الاتصال…" forState:UIControlStateNormal];
+    self.waitLabel.text = @"جارٍ الاتصال بلوحة الإدارة";
+    self.timerLabel.hidden = NO;
+    self.timerLabel.text = @"•••";
     self.loadingOverlay.hidden = NO;
     [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.loadingOverlay.alpha = 1.0; }];
-    
-    // FIX: run countdown visible to user, then call server
-    self.countdown = 3;
-    self.timerLabel.text = [NSString stringWithFormat:@"%ld", (long)self.countdown];
-    self.activationTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
-                                                           target:self
-                                                         selector:@selector(tickTimer)
-                                                         userInfo:nil
-                                                          repeats:YES];
-}
-
-- (void)tickTimer {
-    self.countdown--;
-    if (self.countdown <= 0) {
-        [self.activationTimer invalidate];
-        self.activationTimer = nil;
-        self.timerLabel.text = @"0";
-        [self finalizeActivation];
-        return;
-    }
-    self.timerLabel.text = [NSString stringWithFormat:@"%ld", (long)self.countdown];
+    // ابدأ الطلب فوراً؛ لا يوجد عدّ تنازلي مصطنع قبل الاتصال بالخادم.
+    [self finalizeActivation];
 }
 
 - (void)finalizeActivation {
@@ -458,8 +442,9 @@
         case WFLicenseStatusDeviceRecovery:
             return @"هذا الكود المستخدم على جهاز آخر";
         case WFLicenseStatusNetworkError:
+            return @"تعذر الوصول إلى الخادم الآن؛ تحقق من الإنترنت وسيُعاد الاتصال تلقائياً";
         case WFLicenseStatusProjectDisabled:
-            return @"يوجد صيانة على الخادم، انتظرونا بضع ساعات";
+            return @"تعذر مطابقة إعدادات المشروع مع لوحة الإدارة";
         case WFLicenseStatusExpired:
             return @"هذا الكود منتهي الصلاحية";
         case WFLicenseStatusBlocked:

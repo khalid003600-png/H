@@ -277,24 +277,40 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-# إعدادات لوحة الترخيص خاصة بكل نشر ولا تُحفظ في المصدر. تُحوّل متغيرات
-# البيئة إلى Objective-C string literals داخل مجلد البناء المؤقت فقط.
+# عنوان اللوحة ومعرّف المشروع قيمتان عامتان وليستا أسراراً. يمكن تجاوزهما
+# من بيئة البناء، وتضمن القيم الافتراضية أن بناء GitHub يعمل حتى عندما تكون
+# Secrets الاختيارية غير مضبوطة. لا يُقبل Project Secret في هذا السكربت.
 escape_objc_string() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-PANEL_BASE_URL_ESCAPED="$(escape_objc_string "${WOLFOX_PANEL_BASE_URL:-}")"
-PROJECT_KEY_ESCAPED="$(escape_objc_string "${WOLFOX_PROJECT_KEY:-}")"
+PANEL_BASE_URL_VALUE="${WOLFOX_PANEL_BASE_URL:-https://wolfox.bitsyscore.com}"
+PROJECT_KEY_VALUE="${WOLFOX_PROJECT_KEY:-wolfox_ios}"
+PROJECT_BUNDLE_ID_VALUE="${WOLFOX_PROJECT_BUNDLE_ID:-com.wolfox.gpspro}"
+
+if [[ "$PANEL_BASE_URL_VALUE" != https://* ]]; then
+    echo "❌ رابط لوحة الترخيص يجب أن يبدأ بـ https://"
+    exit 1
+fi
+if [ -z "$PROJECT_KEY_VALUE" ] || [ -z "$PROJECT_BUNDLE_ID_VALUE" ]; then
+    echo "❌ معرّف المشروع وBundle ID الخاص به لا يمكن أن يكونا فارغين."
+    exit 1
+fi
+
+PANEL_BASE_URL_ESCAPED="$(escape_objc_string "$PANEL_BASE_URL_VALUE")"
+PROJECT_KEY_ESCAPED="$(escape_objc_string "$PROJECT_KEY_VALUE")"
+PROJECT_BUNDLE_ID_ESCAPED="$(escape_objc_string "$PROJECT_BUNDLE_ID_VALUE")"
 {
     printf '#define WF_PANEL_BASE_URL @"%s"\n' "$PANEL_BASE_URL_ESCAPED"
     printf '#define WF_PROJECT_KEY @"%s"\n' "$PROJECT_KEY_ESCAPED"
+    printf '#define WF_PROJECT_BUNDLE_ID @"%s"\n' "$PROJECT_BUNDLE_ID_ESCAPED"
 } > "$GENERATED_LICENSE_CONFIG"
 chmod 0600 "$GENERATED_LICENSE_CONFIG"
 
 if [ -z "${WOLFOX_PANEL_BASE_URL:-}" ] || [ -z "${WOLFOX_PROJECT_KEY:-}" ]; then
-    echo "⚠️  إعدادات لوحة الترخيص غير مضمّنة؛ البناء صالح لكن ربط اللوحة يحتاج متغيرات البيئة الآمنة."
+    echo "✅ تم استخدام معرّفات لوحة WolFox العامة الافتراضية؛ لا توجد أسرار داخل البناء."
 else
-    echo "✅ تم تضمين إعدادات لوحة الترخيص من متغيرات البيئة دون حفظها في المصدر."
+    echo "✅ تم استخدام معرّفات لوحة الترخيص المحددة في بيئة البناء."
 fi
 
 build_arch arm64
