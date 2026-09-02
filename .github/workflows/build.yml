@@ -1,0 +1,53 @@
+name: Build WolFox 1.8.2
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bundle_ids:
+        description: "Bundle IDs مفصولة بفاصلة (اختياري)"
+        required: false
+        default: "sa.gov.moia.mosques-2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wolfox-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: Linux tests and iOS arm64 packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+      WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run compatibility checks
+        run: |
+          chmod +x ./*.sh tools/*.sh
+          ./run_all_linux_tests.sh
+          ./test_build_compatibility_static.sh
+      - name: Build DEB packages
+        run: ./wolfox_setup_build.sh
+      - name: Verify outputs
+        run: |
+          test -f WolFox.dylib
+          find . -maxdepth 1 -type f -name 'WolFox*_Rootful.deb' -print -quit | grep -q .
+          find . -maxdepth 1 -type f -name 'WolFox*_Rootless.deb' -print -quit | grep -q .
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: WolFox-iOS-arm64-${{ github.run_number }}
+          path: |
+            WolFox.dylib
+            WolFox*_Rootful.deb
+            WolFox*_Rootless.deb
+          if-no-files-found: error
+          retention-days: 14
