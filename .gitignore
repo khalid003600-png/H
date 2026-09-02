@@ -1,0 +1,9 @@
+.DS_Store
+.theos/
+.wolfox-build/
+WolFox.dylib
+WolFox_v*_Rootful.deb
+WolFox_v*_Rootless.deb
+WolFoxTargetBundles.txt
+*.log
+*.o

@@ -1,0 +1,50 @@
+flowchart LR
+    %% Based on static symbol/disassembly analysis of GPS_HK.framework
+    U[التطبيق المضيف / CLLocationManager client]
+    D[CLLocationManagerDelegate المغلّف\nensureDelegateWrapped:]
+    R[CLLocationManager الحقيقي\nrealManager]
+    RR[RealLocationReader\nعينة حقيقية]
+    G[GPSHookManager\nطبقة الإدارة والاعتراض]
+    P[processedLocation:\nمعالجة/اختيار التحديث]
+    T[push timer + pushQueue\npushInterval / rebuildPushTimer]
+    E[SpoofingEngine\nمحرك التوليد]
+    S[حالة المحرك\nstatic / route / travel / random walk / GPX]
+    X[GpsSample المصطنعة\nfakeSample]
+    L[CLLocation المصطنعة\nfakeCoordinate / altitude / speed / course / accuracy]
+    O[إشعار الحالة\nGPSHookManagerSpoofingDidChangeNotification]
+
+    U -->|إنشاء مدير الموقع وdelegate| G
+    G -->|تغليف/اعتراض delegate| D
+    D -->|تشغيل واستقبال التحديثات| R
+    R --> RR
+    RR -->|setRealSample| E
+    RR -->|تحديث حقيقي داخلي| G
+
+    G -->|setEnabled و setMode| E
+    G -->|pushCurrentLocationNow| T
+    E --> S
+    S -->|advance dt| E
+    E -->|fakeSample| X
+    X --> L
+    L --> P
+    T -->|دفع دوري أو فوري| P
+    G -->|حالة spoofingEnabled| P
+    P -->|عند الانتحال مفعّل: البديل| D
+    P -->|عند الانتحال متوقف: الحقيقي| D
+    D -->|تحديث delegate النهائي| U
+    G -.->|تغيير الحالة| O
+
+    classDef confirmed fill:#d9f2d9,stroke:#287a3e,color:#123b1e,stroke-width:1.5px;
+    classDef inferred fill:#fff0cc,stroke:#a66b00,color:#4d3200,stroke-width:1.5px;
+    classDef external fill:#e5e7eb,stroke:#4b5563,color:#111827,stroke-width:1.5px;
+    class U,R,D external;
+    class G,E,RR,P,T,S,X,L,O confirmed;
+
+    subgraph LEGEND[مفتاح القراءة]
+      C[أخضر: رمز/مكوّن مؤكد في الملف التنفيذي]
+      I[أصفر: وظيفة مستنتجة من التفكيك وأسماء الرموز]
+      N[رمادي: مكوّن خارجي أو تطبيق مضيف]
+    end
+    C:::confirmed
+    I:::inferred
+    N:::external
