@@ -6,11 +6,11 @@
 #define WF_LICENSE_CONFIG_H
 
 #ifndef WF_PANEL_BASE_URL
-#define WF_PANEL_BASE_URL @"https://wolfox.bitsyscore.com"
+#define WF_PANEL_BASE_URL @"https://wolfox.bitsyscore.com/api/v1"
 #endif
 
 #ifndef WF_PROJECT_KEY
-#define WF_PROJECT_KEY @"wolfox_ios"
+#define WF_PROJECT_KEY @""
 #endif
 
 #ifndef WF_PROJECT_BUNDLE_ID
