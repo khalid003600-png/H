@@ -32,6 +32,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Install static-test dependency
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ripgrep
+
       - name: Run static compatibility checks
         run: |
           chmod +x ./*.sh tools/*.sh
