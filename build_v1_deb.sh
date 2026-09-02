@@ -277,15 +277,13 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-# عنوان اللوحة ومعرّف المشروع قيمتان عامتان وليستا أسراراً. يمكن تجاوزهما
-# من بيئة البناء، وتضمن القيم الافتراضية أن بناء GitHub يعمل حتى عندما تكون
-# Secrets الاختيارية غير مضبوطة. لا يُقبل Project Secret في هذا السكربت.
+# رابط API عام، أما مفتاح المشروع فيجب حقنه من بيئة البناء ولا يُحفظ في المصدر.
 escape_objc_string() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-PANEL_BASE_URL_VALUE="${WOLFOX_PANEL_BASE_URL:-https://wolfox.bitsyscore.com}"
-PROJECT_KEY_VALUE="${WOLFOX_PROJECT_KEY:-wolfox_ios}"
+PANEL_BASE_URL_VALUE="${WOLFOX_PANEL_BASE_URL:-https://wolfox.bitsyscore.com/api/v1}"
+PROJECT_KEY_VALUE="${WOLFOX_PROJECT_KEY:-}"
 PROJECT_BUNDLE_ID_VALUE="${WOLFOX_PROJECT_BUNDLE_ID:-com.wolfox.gpspro}"
 
 if [[ "$PANEL_BASE_URL_VALUE" != https://* ]]; then
@@ -293,7 +291,7 @@ if [[ "$PANEL_BASE_URL_VALUE" != https://* ]]; then
     exit 1
 fi
 if [ -z "$PROJECT_KEY_VALUE" ] || [ -z "$PROJECT_BUNDLE_ID_VALUE" ]; then
-    echo "❌ معرّف المشروع وBundle ID الخاص به لا يمكن أن يكونا فارغين."
+    echo "❌ اضبط WOLFOX_PROJECT_KEY في GitHub Secrets قبل البناء؛ Bundle ID لا يمكن أن يكون فارغاً."
     exit 1
 fi
 
@@ -307,11 +305,7 @@ PROJECT_BUNDLE_ID_ESCAPED="$(escape_objc_string "$PROJECT_BUNDLE_ID_VALUE")"
 } > "$GENERATED_LICENSE_CONFIG"
 chmod 0600 "$GENERATED_LICENSE_CONFIG"
 
-if [ -z "${WOLFOX_PANEL_BASE_URL:-}" ] || [ -z "${WOLFOX_PROJECT_KEY:-}" ]; then
-    echo "✅ تم استخدام معرّفات لوحة WolFox العامة الافتراضية؛ لا توجد أسرار داخل البناء."
-else
-    echo "✅ تم استخدام معرّفات لوحة الترخيص المحددة في بيئة البناء."
-fi
+echo "✅ تم حقن إعدادات لوحة الترخيص من بيئة البناء دون حفظ المفتاح في المصدر."
 
 build_arch arm64
 cp "$BUILD_DIR/arm64/WolFox.dylib" "$OUTPUT_DYLIB"
