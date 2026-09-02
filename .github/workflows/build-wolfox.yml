@@ -80,10 +80,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           install -m 0755 "$RUNNER_TEMP/ldid-src/ldid" "$RUNNER_TEMP/bin/ldid"
 
+      - name: Validate License Hub configuration
+        env:
+          WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+        run: |
+          test -n "$WOLFOX_PROJECT_KEY" || { echo "::error::Missing WOLFOX_PROJECT_KEY repository secret"; exit 1; }
+
       - name: Build signed Rootful and Rootless packages
         env:
           MANUAL_BUNDLE_IDS: ${{ inputs.bundle_ids }}
-          WOLFOX_PANEL_BASE_URL: ${{ secrets.WOLFOX_PANEL_BASE_URL }}
+          WOLFOX_PANEL_BASE_URL: https://wolfox.bitsyscore.com/api/v1
           WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
         run: |
           BUNDLE_IDS="${MANUAL_BUNDLE_IDS:-sa.gov.moia.mosques-2}"
