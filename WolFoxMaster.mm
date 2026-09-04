@@ -78,6 +78,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)refreshFloatingStatusIcon;
 - (void)handleFloatingStatusTap:(UIButton *)sender;
 - (void)handleFloatingStatusPan:(UIPanGestureRecognizer *)gesture;
+- (void)setFloatingStatusIconVisible:(BOOL)visible;
 - (void)closeFloatingControlPanel:(nullable UIButton *)sender;
 - (void)prepareVirtualCameraLongPress;
 @end
@@ -2651,7 +2652,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     // ════════════════════════════════════════════════════════
     secLabel(@"الظهور والإخفاء", cy);
     cy += 24;
-    UIView *visCard = newCard(cy, 140);
+    UIView *visCard = newCard(cy, 210);
     [visCard addSubview:[self royalSwitchInside:visCard
         t:@"إظهار الواجهة بـ 3 ضغطات على الصوت"
         i:@"speaker.wave.2.fill"
@@ -2677,7 +2678,25 @@ static BOOL WFMasterProcessIsEligible(void) {
                 ? @"ستختفي الواجهة — افتحها بزر الصوت"
                 : @"الواجهة ستظهر عند كل فتح"];
     }]];
-    cy += 140 + 18;
+    BOOL iconVisible = ![[NSUserDefaults standardUserDefaults] objectForKey:@"WF_FLOATING_STATUS_VISIBLE"] ||
+                       [[NSUserDefaults standardUserDefaults] boolForKey:@"WF_FLOATING_STATUS_VISIBLE"];
+    [visCard addSubview:[self royalSwitchInside:visCard
+        t:@"إظهار العلامة العائمة للحالة"
+        i:@"location.circle.fill"
+        isOn:iconVisible
+        y:140
+        action:^(UISwitch *s){
+            if (!s.on && ![WolFoxProStore shared].volumeGestureEnabled) {
+                [WolFoxProStore shared].volumeGestureEnabled = YES;
+                [[WolFoxProStore shared] saveSettings];
+                [self showToast:@"تم تفعيل اختصار الصوت لاستعادة العلامة"];
+            }
+            [[WolFoxController shared] setFloatingStatusIconVisible:s.on];
+            [self showToast:s.on
+                ? @"العلامة العائمة ظاهرة الآن"
+                : @"تم إخفاء العلامة — اضغط زر الصوت 3 مرات لفتح الإعدادات"];
+    }]];
+    cy += 210 + 18;
 
 // 4. التنبيهات
     // ════════════════════════════════════════════════════════
@@ -3894,6 +3913,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.floatingIcon addTarget:self action:@selector(handleFloatingStatusTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.floatingIcon addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleFloatingStatusPan:)]];
     [self.overlayWindow addSubview:self.floatingIcon];
+    BOOL iconVisible = ![[NSUserDefaults standardUserDefaults] objectForKey:@"WF_FLOATING_STATUS_VISIBLE"] ||
+                       [[NSUserDefaults standardUserDefaults] boolForKey:@"WF_FLOATING_STATUS_VISIBLE"];
+    self.floatingIcon.hidden = !iconVisible;
     [self refreshFloatingStatusIcon];
     
     self.mainVC.view.hidden = YES;
@@ -4026,6 +4048,17 @@ static BOOL WFMasterProcessIsEligible(void) {
         WFLog(@"[WolFox][UI] dismiss_confirmed_volume_hook_stays_active");
 #endif
     }]; 
+}
+
+- (void)setFloatingStatusIconVisible:(BOOL)visible {
+    [[NSUserDefaults standardUserDefaults] setBool:visible forKey:@"WF_FLOATING_STATUS_VISIBLE"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    self.floatingIcon.hidden = !visible;
+    if (visible) {
+        self.overlayWindow.hidden = NO;
+        [self refreshFloatingStatusIcon];
+        [self.overlayWindow bringSubviewToFront:self.floatingIcon];
+    }
 }
 
 - (void)refreshFloatingStatusIcon {
