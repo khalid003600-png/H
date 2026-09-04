@@ -22,6 +22,16 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 }
 @end
 
+@implementation WolFoxLocationProfile
+- (id)copyWithZone:(NSZone *)zone {
+    WolFoxLocationProfile *copy = [[WolFoxLocationProfile allocWithZone:zone] init];
+    copy.profileID = self.profileID; copy.name = self.name; copy.coordinate = self.coordinate;
+    copy.speed = self.speed; copy.updateIntervalSeconds = self.updateIntervalSeconds;
+    copy.jitterEnabled = self.jitterEnabled;
+    return copy;
+}
+@end
+
 @implementation WolFoxProIdentifier
 - (id)copyWithZone:(NSZone *)zone {
     WolFoxProIdentifier *copy = [[WolFoxProIdentifier allocWithZone:zone] init];
@@ -41,12 +51,15 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 
 @interface WolFoxProStore ()
 - (void)loadLocationHistory;
+- (void)loadLocationProfiles;
+- (void)persistLocationProfiles;
 @end
 
 @implementation WolFoxProStore {
     sqlite3 *_db;
     NSMutableArray *_mutableLocations;
     NSMutableArray *_mutableLocationHistory;
+    NSMutableArray *_mutableLocationProfiles;
     NSMutableArray *_mutableIdentifiers;
 }
 
@@ -69,6 +82,7 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     if (self = [super init]) {
         [self openDB];
         [self loadSettings];
+        [self loadLocationProfiles];
     }
     return self;
 }
@@ -241,6 +255,104 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 - (void)clearLocationHistory {
     if (sqlite3_exec(_db, "DELETE FROM location_history;", NULL, NULL, NULL) == SQLITE_OK) {
         [_mutableLocationHistory removeAllObjects];
+    }
+}
+
+
+- (void)loadLocationProfiles {
+    @synchronized(self) {
+        _mutableLocationProfiles = [NSMutableArray new];
+        id saved = [[NSUserDefaults standardUserDefaults] objectForKey:@"WF_LOCATION_PROFILES_V1"];
+        if (![saved isKindOfClass:[NSArray class]]) return;
+        for (id rawItem in (NSArray *)saved) {
+            if (![rawItem isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary *item = (NSDictionary *)rawItem;
+            id latitudeValue = item[@"latitude"];
+            id longitudeValue = item[@"longitude"];
+            if (![latitudeValue respondsToSelector:@selector(doubleValue)] ||
+                ![longitudeValue respondsToSelector:@selector(doubleValue)]) continue;
+            CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake([latitudeValue doubleValue], [longitudeValue doubleValue]);
+            if (!CLLocationCoordinate2DIsValid(coordinate)) continue;
+
+            WolFoxLocationProfile *profile = [WolFoxLocationProfile new];
+            profile.profileID = [item[@"profileID"] isKindOfClass:[NSString class]] ? item[@"profileID"] : [[NSUUID UUID] UUIDString];
+            profile.name = [item[@"name"] isKindOfClass:[NSString class]] ? item[@"name"] : @"ملف موقع";
+            profile.coordinate = coordinate;
+            profile.speed = WFClampSimulationSpeed([item[@"speed"] respondsToSelector:@selector(doubleValue)] ? [item[@"speed"] doubleValue] : WFDefaultSimulationSpeedKmh);
+            profile.updateIntervalSeconds = WFClampGPSUpdateInterval([item[@"updateInterval"] respondsToSelector:@selector(doubleValue)] ? [item[@"updateInterval"] doubleValue] : WFDefaultGPSUpdateIntervalSeconds);
+            profile.jitterEnabled = [item[@"jitter"] respondsToSelector:@selector(boolValue)] ? [item[@"jitter"] boolValue] : WFDefaultJitterEnabled;
+            [_mutableLocationProfiles addObject:profile];
+            if (_mutableLocationProfiles.count >= 25) break;
+        }
+    }
+}
+
+- (void)persistLocationProfiles {
+    @synchronized(self) {
+        NSMutableArray *rawProfiles = [NSMutableArray new];
+        for (WolFoxLocationProfile *profile in _mutableLocationProfiles) {
+            [rawProfiles addObject:@{
+                @"profileID": profile.profileID ?: @"",
+                @"name": profile.name ?: @"ملف موقع",
+                @"latitude": @(profile.coordinate.latitude),
+                @"longitude": @(profile.coordinate.longitude),
+                @"speed": @(profile.speed),
+                @"updateInterval": @(WFClampGPSUpdateInterval(profile.updateIntervalSeconds)),
+                @"jitter": @(profile.jitterEnabled)
+            }];
+        }
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:rawProfiles forKey:@"WF_LOCATION_PROFILES_V1"];
+        [defaults synchronize];
+    }
+}
+
+- (NSArray<WolFoxLocationProfile *> *)locationProfiles {
+    @synchronized(self) {
+        return [[NSArray alloc] initWithArray:_mutableLocationProfiles ?: @[] copyItems:YES];
+    }
+}
+
+- (void)saveLocationProfile:(WolFoxLocationProfile *)profile {
+    if (!profile || !CLLocationCoordinate2DIsValid(profile.coordinate)) return;
+    WolFoxLocationProfile *safeProfile = [profile copy];
+    NSString *name = [safeProfile.name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    safeProfile.name = name.length ? name : @"ملف موقع";
+    safeProfile.profileID = safeProfile.profileID.length ? safeProfile.profileID : [[NSUUID UUID] UUIDString];
+    safeProfile.speed = WFClampSimulationSpeed(safeProfile.speed);
+    safeProfile.updateIntervalSeconds = WFClampGPSUpdateInterval(safeProfile.updateIntervalSeconds);
+    @synchronized(self) {
+        if (!_mutableLocationProfiles) _mutableLocationProfiles = [NSMutableArray new];
+        NSUInteger index = [_mutableLocationProfiles indexOfObjectPassingTest:^BOOL(WolFoxLocationProfile *saved, NSUInteger idx, BOOL *stop) {
+            (void)idx;
+            if (![saved.profileID isEqualToString:safeProfile.profileID]) return NO;
+            *stop = YES;
+            return YES;
+        }];
+        if (index != NSNotFound) [_mutableLocationProfiles removeObjectAtIndex:index];
+        [_mutableLocationProfiles insertObject:safeProfile atIndex:0];
+        while (_mutableLocationProfiles.count > 25) [_mutableLocationProfiles removeLastObject];
+        [self persistLocationProfiles];
+    }
+}
+
+- (void)deleteLocationProfileID:(NSString *)profileID {
+    if (!profileID.length) return;
+    @synchronized(self) {
+        NSIndexSet *matches = [_mutableLocationProfiles indexesOfObjectsPassingTest:^BOOL(WolFoxLocationProfile *profile, NSUInteger idx, BOOL *stop) {
+            (void)idx; (void)stop;
+            return [profile.profileID isEqualToString:profileID];
+        }];
+        if (matches.count == 0) return;
+        [_mutableLocationProfiles removeObjectsAtIndexes:matches];
+        [self persistLocationProfiles];
+    }
+}
+
+- (void)clearLocationProfiles {
+    @synchronized(self) {
+        [_mutableLocationProfiles removeAllObjects];
+        [self persistLocationProfiles];
     }
 }
 

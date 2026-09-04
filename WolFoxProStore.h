@@ -20,6 +20,15 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 @property (nonatomic, strong) NSDate *usedAt;
 @end
 
+@interface WolFoxLocationProfile : NSObject <NSCopying>
+@property (nonatomic, copy) NSString *profileID;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) CLLocationCoordinate2D coordinate;
+@property (nonatomic, assign) double speed;
+@property (nonatomic, assign) NSTimeInterval updateIntervalSeconds;
+@property (nonatomic, assign) BOOL jitterEnabled;
+@end
+
 @interface WolFoxProIdentifier : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *uuid;
 @property (nonatomic, copy) NSString *name;
@@ -48,6 +57,12 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 @property (readonly, copy, nonatomic) NSArray<WolFoxLocationHistoryEntry *> *locationHistory;
 - (void)recordLocationHistoryWithName:(NSString *)name coordinate:(CLLocationCoordinate2D)coordinate;
 - (void)clearLocationHistory;
+
+// Quick location profiles (Defaults based, capped at 25)
+@property (readonly, copy, nonatomic) NSArray<WolFoxLocationProfile *> *locationProfiles;
+- (void)saveLocationProfile:(WolFoxLocationProfile *)profile;
+- (void)deleteLocationProfileID:(NSString *)profileID;
+- (void)clearLocationProfiles;
 
 // Identifiers (Defaults based)
 @property (readonly, copy, nonatomic) NSArray<WolFoxProIdentifier *> *identifiers;

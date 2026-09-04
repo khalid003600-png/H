@@ -130,6 +130,10 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)showLocationHistory;
 - (void)historySelected:(UIButton *)button;
 - (void)clearLocationHistoryPressed;
+- (void)showLocationProfiles;
+- (void)saveCurrentLocationProfile;
+- (void)locationProfileSelected:(UIButton *)button;
+- (void)deleteLocationProfile:(UIButton *)button;
 - (void)editFav:(UIButton *)button;
 - (void)exportLocationData;
 - (void)importLocationDataFromClipboard;
@@ -1083,8 +1087,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     WolFoxProStore *locationStore = [WolFoxProStore shared];
     NSArray *savedLocations = locationStore.locations;
     NSUInteger historyCount = locationStore.locationHistory.count;
+    NSUInteger profileCount = locationStore.locationProfiles.count;
     BOOL favoritesEmpty = savedLocations.count == 0;
-    CGFloat favoritesHeight = favoritesEmpty ? 246.0 : 184.0;
+    CGFloat favoritesHeight = favoritesEmpty ? 308.0 : 246.0;
     // favoritesY محسوبة بناءً على kbCard (y=466, h=210) + 15 margin
     CGFloat favoritesY = 466.0 + 210.0 + 15.0; // = 691.0 — ثابتة لمحاذاة المحتوى
     CGFloat cy = favoritesY + favoritesHeight + 15.0;
@@ -1253,6 +1258,20 @@ static BOOL WFMasterProcessIsEligible(void) {
     [historyButton addTarget:self action:@selector(showLocationHistory) forControlEvents:UIControlEventTouchUpInside];
     historyButton.accessibilityLabel = historyCount > 0 ? @"عرض سجل المواقع المستخدمة" : @"سجل المواقع فارغ";
     [favoritesCard addSubview:historyButton];
+
+    UIButton *profilesButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    CGFloat profilesY = favoritesEmpty ? 240.0 : 178.0;
+    profilesButton.frame = CGRectMake(16, profilesY, favoritesCard.bounds.size.width - 32, 52);
+    profilesButton.backgroundColor = [[WolFoxProTheme gold] colorWithAlphaComponent:0.12];
+    profilesButton.layer.cornerRadius = 13;
+    [profilesButton setTitle:(profileCount ? [NSString stringWithFormat:@"ملفات المواقع السريعة • %lu", (unsigned long)profileCount] : @"إنشاء ملف موقع سريع") forState:UIControlStateNormal];
+    [profilesButton setTitleColor:[WolFoxProTheme gold] forState:UIControlStateNormal];
+    profilesButton.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [profilesButton setImage:[UIImage systemImageNamed:@"slider.horizontal.3"] forState:UIControlStateNormal];
+    profilesButton.tintColor = [WolFoxProTheme gold];
+    [profilesButton addTarget:self action:@selector(showLocationProfiles) forControlEvents:UIControlEventTouchUpInside];
+    profilesButton.accessibilityLabel = @"عرض أو إنشاء ملفات المواقع السريعة";
+    [favoritesCard addSubview:profilesButton];
 
     UIView *scheduleCard = [[UIView alloc] initWithFrame:CGRectMake(15, cy, w - 30, 72)];
     scheduleCard.backgroundColor = [WolFoxProTheme surfacePrimary];
@@ -3128,13 +3147,26 @@ static BOOL WFMasterProcessIsEligible(void) {
         }];
     }
 
+    NSMutableArray *profiles = [NSMutableArray new];
+    for (WolFoxLocationProfile *profile in store.locationProfiles) {
+        [profiles addObject:@{
+            @"name": profile.name ?: @"ملف موقع",
+            @"latitude": @(profile.coordinate.latitude),
+            @"longitude": @(profile.coordinate.longitude),
+            @"speed": @(profile.speed),
+            @"update_interval": @(profile.updateIntervalSeconds),
+            @"jitter": @(profile.jitterEnabled)
+        }];
+    }
+
     return @{
         @"format": @"wolfox-location-backup",
         @"schema_version": @1,
         @"app_version": [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.8.2",
         @"created_at": @([NSDate date].timeIntervalSince1970),
         @"locations": locations,
-        @"history": history
+        @"history": history,
+        @"profiles": profiles
     };
 }
 
@@ -3181,14 +3213,16 @@ static BOOL WFMasterProcessIsEligible(void) {
         [self showToast:@"هذه ليست نسخة احتياطية معتمدة من WolFox"];
         return;
     }
-    NSArray *rawLocations = [payload[@"locations"] isKindOfClass:[NSArray class]] ? payload[@"locations"] : nil;
-    if (!rawLocations) {
-        [self showToast:@"لا توجد مواقع قابلة للاستيراد"];
+    NSArray *rawLocations = [payload[@"locations"] isKindOfClass:[NSArray class]] ? payload[@"locations"] : @[];
+    NSArray *rawProfiles = [payload[@"profiles"] isKindOfClass:[NSArray class]] ? payload[@"profiles"] : @[];
+    if (rawLocations.count == 0 && rawProfiles.count == 0) {
+        [self showToast:@"لا توجد مواقع أو ملفات قابلة للاستيراد"];
         return;
     }
 
     WolFoxProStore *store = [WolFoxProStore shared];
     NSUInteger imported = 0;
+    NSUInteger importedProfiles = 0;
     NSUInteger skipped = 0;
     for (id rawItem in rawLocations) {
         if (![rawItem isKindOfClass:[NSDictionary class]]) { skipped++; continue; }
@@ -3230,11 +3264,33 @@ static BOOL WFMasterProcessIsEligible(void) {
         imported++;
     }
 
-    if (imported == 0) {
-        [self showToast:skipped ? @"لم تُضف مواقع جديدة؛ البيانات مكررة أو غير صالحة" : @"النسخة الاحتياطية فارغة"];
+    for (id rawItem in rawProfiles) {
+        if (![rawItem isKindOfClass:[NSDictionary class]]) { skipped++; continue; }
+        NSDictionary *item = (NSDictionary *)rawItem;
+        id latitudeValue = item[@"latitude"];
+        id longitudeValue = item[@"longitude"];
+        if (![latitudeValue respondsToSelector:@selector(doubleValue)] || ![longitudeValue respondsToSelector:@selector(doubleValue)]) {
+            skipped++;
+            continue;
+        }
+        CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake([latitudeValue doubleValue], [longitudeValue doubleValue]);
+        if (!CLLocationCoordinate2DIsValid(coordinate)) { skipped++; continue; }
+        NSString *name = [item[@"name"] isKindOfClass:[NSString class]] ? item[@"name"] : @"ملف موقع مستورد";
+        WolFoxLocationProfile *profile = [WolFoxLocationProfile new];
+        profile.name = name;
+        profile.coordinate = coordinate;
+        profile.speed = [item[@"speed"] respondsToSelector:@selector(doubleValue)] ? [item[@"speed"] doubleValue] : store.simSpeed;
+        profile.updateIntervalSeconds = [item[@"update_interval"] respondsToSelector:@selector(doubleValue)] ? [item[@"update_interval"] doubleValue] : store.updateIntervalSeconds;
+        profile.jitterEnabled = [item[@"jitter"] respondsToSelector:@selector(boolValue)] ? [item[@"jitter"] boolValue] : store.jitterActive;
+        [store saveLocationProfile:profile];
+        importedProfiles++;
+    }
+
+    if (imported == 0 && importedProfiles == 0) {
+        [self showToast:skipped ? @"لم تُضف بيانات؛ العناصر مكررة أو غير صالحة" : @"النسخة الاحتياطية فارغة"];
         return;
     }
-    [self showToast:[NSString stringWithFormat:@"تم استيراد %lu موقعاً وتجاوز %lu ✅", (unsigned long)imported, (unsigned long)skipped]];
+    [self showToast:[NSString stringWithFormat:@"تم استيراد %lu موقعاً و%lu ملفاً وتجاوز %lu ✅", (unsigned long)imported, (unsigned long)importedProfiles, (unsigned long)skipped]];
 }
 
 - (void)showLocationDataResetOptions {
@@ -3246,10 +3302,11 @@ static BOOL WFMasterProcessIsEligible(void) {
         [confirm addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
         [confirm addAction:[UIAlertAction actionWithTitle:@"مسح نهائياً" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
             WolFoxProStore *store = [WolFoxProStore shared];
-            if (mode == 1 || mode == 3) {
+            if (mode == 1 || mode == 3 || mode == 5) {
                 for (WolFoxProLocation *location in [store.locations copy]) [store deleteLocationID:location.ID];
             }
-            if (mode == 2 || mode == 3) [store clearLocationHistory];
+            if (mode == 2 || mode == 3 || mode == 5) [store clearLocationHistory];
+            if (mode == 4 || mode == 5) [store clearLocationProfiles];
             [self showToast:@"تم مسح البيانات المحددة ✅"];
             if (self->_activePage == 4) [self switchPage:4];
         }]];
@@ -3262,7 +3319,13 @@ static BOOL WFMasterProcessIsEligible(void) {
         confirmReset(2, @"مسح سجل المواقع؟", @"ستبقى المواقع المفضلة محفوظة.");
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"مسح المفضلة والسجل" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
-        confirmReset(3, @"مسح جميع بيانات المواقع؟", @"سيتم حذف المفضلة وسجل الاستخدام نهائياً.");
+        confirmReset(3, @"مسح المفضلة والسجل؟", @"سيتم حذف المفضلة وسجل الاستخدام نهائياً.");
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"مسح ملفات المواقع السريعة" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        confirmReset(4, @"مسح ملفات المواقع السريعة؟", @"سيتم حذف الملفات المحفوظة فقط.");
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"مسح جميع بيانات المواقع" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        confirmReset(5, @"مسح جميع بيانات المواقع؟", @"سيتم حذف المفضلة والسجل وملفات المواقع نهائياً.");
     }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
     sheet.popoverPresentationController.sourceView = self.view;
@@ -3285,6 +3348,7 @@ static BOOL WFMasterProcessIsEligible(void) {
          "Coordinates: %.6f, %.6f\n"
          "Favorites: %lu\n"
          "History: %lu\n"
+         "Quick profiles: %lu\n"
          "Identifier layer: %@\n"
          "Bluetooth spoof: %@\n"
          "Virtual camera: %@\n",
@@ -3298,6 +3362,7 @@ static BOOL WFMasterProcessIsEligible(void) {
          store.currentFakeCoords.longitude,
          (unsigned long)store.locations.count,
          (unsigned long)store.locationHistory.count,
+         (unsigned long)store.locationProfiles.count,
          store.validatedActiveIdentifier ? @"active" : @"inactive",
          store.bluetoothActive ? @"on" : @"off",
          store.mediaUploadActive ? @"on" : @"off"];
@@ -3935,6 +4000,170 @@ static BOOL WFMasterProcessIsEligible(void) {
         [self hidePopup];
         [self showToast:@"✅ تم حذف الموقع من المفضلة"];
         if (self->_activePage == 0) [self switchPage:0];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+
+- (void)showLocationProfiles {
+    NSArray<WolFoxLocationProfile *> *profiles = [WolFoxProStore shared].locationProfiles;
+    [self showPopupWithTitle:@"ملفات المواقع السريعة" icon:@"slider.horizontal.3" content:^{
+        CGFloat contentHeight = MIN(62.0 + MAX(1.0, (CGFloat)profiles.count) * 76.0, 430.0);
+        UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, 300, contentHeight)];
+        scroll.alwaysBounceVertical = profiles.count > 4;
+
+        UIButton *save = [UIButton buttonWithType:UIButtonTypeSystem];
+        save.frame = CGRectMake(10, 8, 280, 44);
+        save.backgroundColor = [[WolFoxProTheme gold] colorWithAlphaComponent:0.14];
+        save.layer.cornerRadius = 12;
+        [save setTitle:@"حفظ الإعداد الحالي كملف" forState:UIControlStateNormal];
+        [save setTitleColor:[WolFoxProTheme gold] forState:UIControlStateNormal];
+        save.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+        if (@available(iOS 13.0, *)) [save setImage:[UIImage systemImageNamed:@"plus.circle.fill"] forState:UIControlStateNormal];
+        save.tintColor = [WolFoxProTheme gold];
+        [save addTarget:self action:@selector(saveCurrentLocationProfile) forControlEvents:UIControlEventTouchUpInside];
+        save.accessibilityLabel = @"حفظ الإحداثية والسرعة والحركة والفاصل الزمني";
+        [scroll addSubview:save];
+
+        CGFloat y = 60.0;
+        if (profiles.count == 0) {
+            UILabel *empty = [[UILabel alloc] initWithFrame:CGRectMake(16, y + 8, 268, 44)];
+            empty.text = @"لا توجد ملفات بعد\nاضغط حفظ الإعداد الحالي للبدء";
+            empty.numberOfLines = 2;
+            empty.textAlignment = NSTextAlignmentCenter;
+            empty.textColor = [WolFoxProTheme textSecondary];
+            empty.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightSemibold];
+            [scroll addSubview:empty];
+            y += 70.0;
+        }
+
+        for (WolFoxLocationProfile *profile in profiles) {
+            UIView *row = [[UIView alloc] initWithFrame:CGRectMake(10, y, 280, 68)];
+            row.backgroundColor = [WolFoxProTheme surfaceSecondary];
+            row.layer.cornerRadius = 12;
+            [scroll addSubview:row];
+
+            UILabel *name = [[UILabel alloc] initWithFrame:CGRectMake(46, 5, 222, 20)];
+            name.text = profile.name;
+            name.textAlignment = NSTextAlignmentRight;
+            name.textColor = [WolFoxProTheme textPrimary];
+            name.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+            [row addSubview:name];
+
+            UILabel *coords = [[UILabel alloc] initWithFrame:CGRectMake(46, 25, 222, 16)];
+            coords.text = [NSString stringWithFormat:@"%.5f, %.5f", profile.coordinate.latitude, profile.coordinate.longitude];
+            coords.textAlignment = NSTextAlignmentRight;
+            coords.textColor = [WolFoxProTheme textSecondary];
+            coords.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightMedium];
+            [row addSubview:coords];
+
+            UILabel *details = [[UILabel alloc] initWithFrame:CGRectMake(46, 43, 222, 17)];
+            details.text = [NSString stringWithFormat:@"%.0f كم/س • %.2f ث • حركة %@", profile.speed, profile.updateIntervalSeconds, profile.jitterEnabled ? @"مفعلة" : @"متوقفة"];
+            details.textAlignment = NSTextAlignmentRight;
+            details.textColor = [WolFoxProTheme accent];
+            details.font = [WolFoxProTheme fontOfSize:9 weight:UIFontWeightSemibold];
+            [row addSubview:details];
+
+            UIButton *apply = [UIButton buttonWithType:UIButtonTypeCustom];
+            apply.frame = CGRectMake(42, 0, 238, 68);
+            objc_setAssociatedObject(apply, "profile_id", profile.profileID, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            [apply addTarget:self action:@selector(locationProfileSelected:) forControlEvents:UIControlEventTouchUpInside];
+            apply.accessibilityLabel = [NSString stringWithFormat:@"تطبيق ملف %@", profile.name ?: @"الموقع"];
+            [row addSubview:apply];
+
+            UIButton *delete = [UIButton buttonWithType:UIButtonTypeSystem];
+            delete.frame = CGRectMake(3, 12, 40, 44);
+            if (@available(iOS 13.0, *)) [delete setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
+            delete.tintColor = [WolFoxProTheme danger];
+            objc_setAssociatedObject(delete, "profile_id", profile.profileID, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            [delete addTarget:self action:@selector(deleteLocationProfile:) forControlEvents:UIControlEventTouchUpInside];
+            delete.accessibilityLabel = [NSString stringWithFormat:@"حذف ملف %@", profile.name ?: @"الموقع"];
+            [row addSubview:delete];
+            y += 76.0;
+        }
+        scroll.contentSize = CGSizeMake(300, y);
+        return scroll;
+    } btnTitle:@"إغلاق" btnColor:[WolFoxProTheme accent]];
+}
+
+- (void)saveCurrentLocationProfile {
+    WolFoxProStore *store = [WolFoxProStore shared];
+    if (!CLLocationCoordinate2DIsValid(store.currentFakeCoords)) {
+        [self showToast:@"حدد إحداثية صالحة أولاً"];
+        return;
+    }
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"حفظ ملف موقع سريع"
+                                                                   message:@"سيُحفظ الموقع والسرعة والفاصل الزمني وحالة الحركة."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"اسم الملف";
+        field.text = [NSString stringWithFormat:@"موقع %.3f, %.3f", store.currentFakeCoords.latitude, store.currentFakeCoords.longitude];
+        field.textAlignment = NSTextAlignmentRight;
+        field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"حفظ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *name = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        WolFoxLocationProfile *profile = [WolFoxLocationProfile new];
+        profile.name = name.length ? name : @"ملف موقع";
+        profile.coordinate = store.currentFakeCoords;
+        profile.speed = store.simSpeed;
+        profile.updateIntervalSeconds = store.updateIntervalSeconds;
+        profile.jitterEnabled = store.jitterActive;
+        [store saveLocationProfile:profile];
+        [self hidePopup];
+        if (self->_activePage == 0) [self switchPage:0];
+        [self showToast:@"تم حفظ ملف الموقع السريع ✅"];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)locationProfileSelected:(UIButton *)button {
+    NSString *profileID = objc_getAssociatedObject(button, "profile_id");
+    WolFoxLocationProfile *selected = nil;
+    for (WolFoxLocationProfile *profile in [WolFoxProStore shared].locationProfiles) {
+        if ([profile.profileID isEqualToString:profileID]) { selected = profile; break; }
+    }
+    if (!selected || !CLLocationCoordinate2DIsValid(selected.coordinate)) {
+        [self showToast:@"تعذر تطبيق ملف الموقع ❌"];
+        return;
+    }
+
+    WolFoxProStore *store = [WolFoxProStore shared];
+    if (store.routeActive) {
+        [[WolFoxProHookManager shared] stopRoute];
+        UIButton *routeButton = objc_getAssociatedObject(self, "_route_btn");
+        [routeButton setTitle:@"بدء محاكاة المسار" forState:UIControlStateNormal];
+        routeButton.backgroundColor = [WolFoxProTheme accent];
+    }
+    store.currentFakeCoords = selected.coordinate;
+    store.simSpeed = MAX(1.0, MIN(120.0, selected.speed));
+    store.updateIntervalSeconds = WFClampGPSUpdateInterval(selected.updateIntervalSeconds);
+    store.jitterActive = selected.jitterEnabled;
+    store.spoofActive = YES;
+    [store saveSettings];
+    [store recordLocationHistoryWithName:selected.name coordinate:selected.coordinate];
+    [self updateMapPin:selected.coordinate];
+    [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [self centerMapOnPin];
+    [self refreshSpoofHeaderStatus];
+    [self hidePopup];
+    if (self->_activePage == 0) [self switchPage:0];
+    [self showToast:@"تم تطبيق ملف الموقع وتشغيل التزييف ✅"];
+}
+
+- (void)deleteLocationProfile:(UIButton *)button {
+    NSString *profileID = objc_getAssociatedObject(button, "profile_id");
+    if (!profileID.length) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"حذف ملف الموقع؟"
+                                                                   message:@"سيُحذف الملف فقط ولن تتغير حالة الموقع الحالية."
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"حذف" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [[WolFoxProStore shared] deleteLocationProfileID:profileID];
+        [self hidePopup];
+        if (self->_activePage == 0) [self switchPage:0];
+        [self showToast:@"تم حذف ملف الموقع"];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
