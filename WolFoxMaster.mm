@@ -130,6 +130,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)applyAccessibilityMetadataToView:(UIView *)view;
 - (void)contentSizeCategoryChanged:(NSNotification *)notification;
 - (void)showLocationHistory;
+- (void)refreshLocationHistoryButton;
 - (void)historySelected:(UIButton *)button;
 - (void)clearLocationHistoryPressed;
 - (void)showLocationProfiles;
@@ -241,6 +242,10 @@ static BOOL WFMasterProcessIsEligible(void) {
                                              selector:@selector(contentSizeCategoryChanged:)
                                                  name:UIContentSizeCategoryDidChangeNotification
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshLocationHistoryButton)
+                                                 name:@"WF_LOCATION_HISTORY_CHANGED"
+                                               object:nil];
 }
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_ROUTE_FINISHED" object:nil];
@@ -248,6 +253,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:WFVirtualCameraStateDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:UIContentSizeCategoryDidChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_LOCATION_HISTORY_CHANGED" object:nil];
     [_activeMapSearch cancel];
     [_realLocManager stopUpdatingLocation];
     _realLocManager.delegate = nil;
@@ -1312,6 +1318,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     historyButton.alpha = historyCount > 0 ? 1.0 : 0.5;
     [historyButton addTarget:self action:@selector(showLocationHistory) forControlEvents:UIControlEventTouchUpInside];
     historyButton.accessibilityLabel = historyCount > 0 ? @"عرض سجل المواقع المستخدمة" : @"سجل المواقع فارغ";
+    objc_setAssociatedObject(self, "_history_button", historyButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [favoritesCard addSubview:historyButton];
 
     UIButton *profilesButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -2212,6 +2219,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         [self presentViewController:alert animated:YES completion:nil];
     } else {
         [WolFoxProStore shared].spoofActive = YES;
+        [WolFoxProStore shared].activeLocationID = 0;
         [[WolFoxProStore shared] saveSettings];
         // Build a simple straight-line route: current fake → target (5 intermediate steps)
         CLLocationCoordinate2D from = [WolFoxProStore shared].currentFakeCoords;
@@ -2342,6 +2350,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         return;
     }
     [WolFoxProStore shared].currentFakeCoords = coordinate;
+    [WolFoxProStore shared].activeLocationID = 0;
     [[WolFoxProStore shared] saveSettings];
     [self updateMapPin:coordinate];
     _currentPin.title = title.length ? title : @"الموقع المحدد";
@@ -3730,6 +3739,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         objc_setAssociatedObject(self, "_target_pin", nil, OBJC_ASSOCIATION_ASSIGN);
     }
     [WolFoxProStore shared].spoofActive = YES;
+    [WolFoxProStore shared].activeLocationID = 0;
     [WolFoxProStore shared].currentFakeCoords = c;
     [[WolFoxProStore shared] saveSettings];
     [self updateMapPin:c];
@@ -3923,8 +3933,10 @@ static BOOL WFMasterProcessIsEligible(void) {
             objc_setAssociatedObject(self, "_target_pin", nil, OBJC_ASSOCIATION_ASSIGN);
         }
         [WolFoxProStore shared].currentFakeCoords = parsed;
+        [WolFoxProStore shared].activeLocationID = 0;
         [WolFoxProStore shared].spoofActive = YES;
         [[WolFoxProStore shared] saveSettings];
+        [[WolFoxProStore shared] recordLocationHistoryWithName:@"إحداثيات ملصقة" coordinate:parsed];
         [self updateMapPin:parsed];
         [[WolFoxProHookManager shared] deliverFakeUpdate];
         [self showRealLocation];
@@ -4108,6 +4120,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     }
     // اختيار موقع محفوظ هو إجراء تفعيل مباشر للموقع الوهمي، وليس مجرد تحديد على الخريطة.
     store.currentFakeCoords = l.coordinate;
+    store.activeLocationID = l.ID;
     store.spoofActive = YES;
     [store saveSettings];
     [self updateMapPin:l.coordinate];
@@ -4162,16 +4175,15 @@ static BOOL WFMasterProcessIsEligible(void) {
         WolFoxProLocation *updated = [location copy];
         NSString *updatedName = [alert.textFields[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         updated.name = updatedName.length ? updatedName : @"موقع محفوظ";
-        CLLocationCoordinate2D previousCoordinate = location.coordinate;
         updated.coordinate = updatedCoordinate;
         if (![store updateLocation:updated]) {
             [self showToast:@"تعذر حفظ التعديل ❌"];
             return;
         }
-        BOOL editingActiveCoordinate = store.spoofActive &&
-            fabs(store.currentFakeCoords.latitude - previousCoordinate.latitude) < 0.000001 &&
-            fabs(store.currentFakeCoords.longitude - previousCoordinate.longitude) < 0.000001;
-        if (editingActiveCoordinate) {
+        BOOL editingActiveFavorite = store.spoofActive &&
+            !store.routeActive &&
+            store.activeLocationID == location.ID;
+        if (editingActiveFavorite) {
             store.currentFakeCoords = updatedCoordinate;
             [store saveSettings];
             [self updateMapPin:updatedCoordinate];
@@ -4331,6 +4343,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         routeButton.backgroundColor = [WolFoxProTheme accent];
     }
     store.currentFakeCoords = selected.coordinate;
+    store.activeLocationID = 0;
     store.simSpeed = MAX(1.0, MIN(120.0, selected.speed));
     store.updateIntervalSeconds = WFClampGPSUpdateInterval(selected.updateIntervalSeconds);
     store.jitterActive = selected.jitterEnabled;
@@ -4360,6 +4373,21 @@ static BOOL WFMasterProcessIsEligible(void) {
         [self showToast:@"تم حذف ملف الموقع"];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)refreshLocationHistoryButton {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self refreshLocationHistoryButton]; });
+        return;
+    }
+    UIButton *historyButton = objc_getAssociatedObject(self, "_history_button");
+    if (!historyButton) return;
+    NSUInteger historyCount = [WolFoxProStore shared].locationHistory.count;
+    [historyButton setTitle:(historyCount ? [NSString stringWithFormat:@"سجل المواقع • %lu", (unsigned long)historyCount] : @"سجل المواقع فارغ")
+                   forState:UIControlStateNormal];
+    historyButton.enabled = historyCount > 0;
+    historyButton.alpha = historyCount > 0 ? 1.0 : 0.5;
+    historyButton.accessibilityLabel = historyCount > 0 ? @"عرض سجل المواقع المستخدمة" : @"سجل المواقع فارغ";
 }
 
 - (void)showLocationHistory {
@@ -4441,7 +4469,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     if (button.tag < 0 || (NSUInteger)button.tag >= entries.count) return;
     WolFoxLocationHistoryEntry *entry = entries[button.tag];
     WolFoxProStore *store = [WolFoxProStore shared];
-    if (store.routeActive) [[WolFoxProHookManager shared] stopRoute];
+    if (store.routeActive) {
+        [[WolFoxProHookManager shared] stopRoute];
+        UIButton *routeButton = objc_getAssociatedObject(self, "_route_btn");
+        [routeButton setTitle:@"بدء محاكاة المسار" forState:UIControlStateNormal];
+        routeButton.backgroundColor = [WolFoxProTheme accent];
+        routeButton.accessibilityLabel = @"بدء محاكاة المسار";
+    }
+    store.activeLocationID = 0;
     store.currentFakeCoords = entry.coordinate;
     store.spoofActive = YES;
     [store saveSettings];
@@ -5305,6 +5340,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     WolFoxProStore *store = [WolFoxProStore shared];
     if (store.routeActive) [[WolFoxProHookManager shared] stopRoute];
     store.currentFakeCoords = favorite.coordinate;
+    store.activeLocationID = favorite.ID;
     store.spoofActive = YES;
     [store saveSettings];
     [[WolFoxProHookManager shared] deliverFakeUpdate];

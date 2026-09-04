@@ -78,6 +78,8 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 @property (nonatomic, assign) BOOL jitterActive;
 @property (nonatomic, assign) BOOL volumeGestureEnabled;
 @property (nonatomic, assign) CLLocationCoordinate2D currentFakeCoords;
+/// المفضلة التي فعّلت الموقع الثابت حالياً؛ صفر عند التفعيل اليدوي أو المسار.
+@property (nonatomic, assign) long long activeLocationID;
 @property (nonatomic, assign) NSInteger themeIndex;
 @property (nonatomic, assign) NSInteger mapStyle; // 0: Standard, 1: Satellite, 2: Hybrid
 @property (nonatomic, assign) double simSpeed;

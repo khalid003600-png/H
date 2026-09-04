@@ -16,6 +16,7 @@ run_test() {
 run_test "test_build_compatibility_static.sh"
 run_test "test_repository_safety_static.sh"
 run_test "test_location_hooks_static.sh"
+run_test "test_location_history_ui_static.sh"
 run_test "test_schedule_static.sh"
 run_test "test_license_recovery_static.sh"
 run_test "test_identifier_hooks_static.sh"

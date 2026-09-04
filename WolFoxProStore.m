@@ -215,6 +215,7 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
             }];
             if (index != NSNotFound) {
                 [_mutableLocations removeObjectAtIndex:index];
+                if (self.activeLocationID == ID) self.activeLocationID = 0;
                 [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_SCHEDULE_LOCATION_DELETED" object:@(ID)];
             }
         }
@@ -246,6 +247,7 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
             entry.usedAt = now;
             [_mutableLocationHistory insertObject:entry atIndex:0];
             while (_mutableLocationHistory.count > 50) [_mutableLocationHistory removeLastObject];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_LOCATION_HISTORY_CHANGED" object:self];
         }
     }
     if (stmt) sqlite3_finalize(stmt);
@@ -255,6 +257,7 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 - (void)clearLocationHistory {
     if (sqlite3_exec(_db, "DELETE FROM location_history;", NULL, NULL, NULL) == SQLITE_OK) {
         [_mutableLocationHistory removeAllObjects];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_LOCATION_HISTORY_CHANGED" object:self];
     }
 }
 
@@ -384,6 +387,17 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     }
     if (!CLLocationCoordinate2DIsValid(self.currentFakeCoords)) {
         self.currentFakeCoords = CLLocationCoordinate2DMake(24.7136, 46.6753);
+    }
+    self.activeLocationID = [[u objectForKey:@"WF_PRO_ACTIVE_LOCATION_ID"] longLongValue];
+    if (self.activeLocationID > 0) {
+        BOOL activeLocationExists = NO;
+        for (WolFoxProLocation *location in _mutableLocations) {
+            if (location.ID == self.activeLocationID) { activeLocationExists = YES; break; }
+        }
+        if (!activeLocationExists) {
+            self.activeLocationID = 0;
+            [u removeObjectForKey:@"WF_PRO_ACTIVE_LOCATION_ID"];
+        }
     }
     // targetRouteCoords persistence
     NSNumber *savedTargetLat = [u objectForKey:@"WF_PRO_TARGET_LAT"];
@@ -533,6 +547,8 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         [u setDouble:WFClampGPSUpdateInterval(self.updateIntervalSeconds) forKey:@"WF_PRO_UPDATE_INTERVAL"];
         [u setDouble:self.currentFakeCoords.latitude forKey:@"WF_PRO_LAT"];
         [u setDouble:self.currentFakeCoords.longitude forKey:@"WF_PRO_LON"];
+        if (self.activeLocationID > 0) [u setObject:@(self.activeLocationID) forKey:@"WF_PRO_ACTIVE_LOCATION_ID"];
+        else [u removeObjectForKey:@"WF_PRO_ACTIVE_LOCATION_ID"];
         [u setDouble:self.targetRouteCoords.latitude forKey:@"WF_PRO_TARGET_LAT"];
         [u setDouble:self.targetRouteCoords.longitude forKey:@"WF_PRO_TARGET_LON"];
         if (self.spoofedImagePath) [u setObject:self.spoofedImagePath forKey:@"WF_PRO_CAM_IMG"];
