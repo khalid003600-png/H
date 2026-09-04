@@ -14,6 +14,14 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 }
 @end
 
+@implementation WolFoxLocationHistoryEntry
+- (id)copyWithZone:(NSZone *)zone {
+    WolFoxLocationHistoryEntry *copy = [[WolFoxLocationHistoryEntry allocWithZone:zone] init];
+    copy.ID = self.ID; copy.name = self.name; copy.coordinate = self.coordinate; copy.usedAt = self.usedAt;
+    return copy;
+}
+@end
+
 @implementation WolFoxProIdentifier
 - (id)copyWithZone:(NSZone *)zone {
     WolFoxProIdentifier *copy = [[WolFoxProIdentifier allocWithZone:zone] init];
@@ -31,9 +39,14 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 }
 @end
 
+@interface WolFoxProStore ()
+- (void)loadLocationHistory;
+@end
+
 @implementation WolFoxProStore {
     sqlite3 *_db;
     NSMutableArray *_mutableLocations;
+    NSMutableArray *_mutableLocationHistory;
     NSMutableArray *_mutableIdentifiers;
 }
 
@@ -76,13 +89,19 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         sqlite3_open(":memory:", &_db);
     }
     
-    char *err = NULL;
-    const char *sql = "CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lon REAL, alt REAL);";
-    if (sqlite3_exec(_db, sql, NULL, NULL, &err) != SQLITE_OK) {
-        WFLog(@"[WolFox][STORE] schema_error=%s", err ?: "unknown");
+    const char *schemaStatements[] = {
+        "CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lon REAL, alt REAL);",
+        "CREATE TABLE IF NOT EXISTS location_history (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lon REAL, used_at REAL);"
+    };
+    for (NSUInteger index = 0; index < sizeof(schemaStatements) / sizeof(schemaStatements[0]); index++) {
+        char *err = NULL;
+        if (sqlite3_exec(_db, schemaStatements[index], NULL, NULL, &err) != SQLITE_OK) {
+            WFLog(@"[WolFox][STORE] schema_error=%s", err ?: "unknown");
+        }
+        if (err) sqlite3_free(err);
     }
-    if (err) sqlite3_free(err);
     [self loadLocations];
+    [self loadLocationHistory];
 }
 
 - (void)loadLocations {
@@ -103,6 +122,24 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     if (stmt) sqlite3_finalize(stmt);
 }
 
+- (void)loadLocationHistory {
+    _mutableLocationHistory = [NSMutableArray new];
+    const char *sql = "SELECT id, name, lat, lon, used_at FROM location_history ORDER BY used_at DESC, id DESC LIMIT 50;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            WolFoxLocationHistoryEntry *entry = [WolFoxLocationHistoryEntry new];
+            entry.ID = sqlite3_column_int64(stmt, 0);
+            const char *nameText = (const char *)sqlite3_column_text(stmt, 1);
+            entry.name = nameText ? [NSString stringWithUTF8String:nameText] : @"موقع مستخدم";
+            entry.coordinate = CLLocationCoordinate2DMake(sqlite3_column_double(stmt, 2), sqlite3_column_double(stmt, 3));
+            entry.usedAt = [NSDate dateWithTimeIntervalSince1970:sqlite3_column_double(stmt, 4)];
+            [_mutableLocationHistory addObject:entry];
+        }
+    }
+    if (stmt) sqlite3_finalize(stmt);
+}
+
 - (long long)saveLocation:(WolFoxProLocation *)l {
     sqlite3_stmt *stmt = NULL;
     const char *sql = "INSERT INTO locations (name, lat, lon, alt) VALUES (?, ?, ?, ?);";
@@ -118,6 +155,37 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     }
     if (stmt) sqlite3_finalize(stmt);
     return l.ID;
+}
+
+- (BOOL)updateLocation:(WolFoxProLocation *)l {
+    if (!l || l.ID <= 0 || !CLLocationCoordinate2DIsValid(l.coordinate)) return NO;
+    NSString *safeName = l.name.length ? l.name : @"موقع محفوظ";
+    sqlite3_stmt *stmt = NULL;
+    BOOL success = NO;
+    const char *sql = "UPDATE locations SET name = ?, lat = ?, lon = ?, alt = ? WHERE id = ?;";
+    if (sqlite3_prepare_v2(_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, [safeName UTF8String], -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 2, l.coordinate.latitude);
+        sqlite3_bind_double(stmt, 3, l.coordinate.longitude);
+        sqlite3_bind_double(stmt, 4, l.altitude);
+        sqlite3_bind_int64(stmt, 5, l.ID);
+        success = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(_db) > 0;
+    }
+    if (stmt) sqlite3_finalize(stmt);
+    if (success) {
+        NSUInteger index = [_mutableLocations indexOfObjectPassingTest:^BOOL(WolFoxProLocation *saved, NSUInteger idx, BOOL *stop) {
+            (void)idx;
+            if (saved.ID != l.ID) return NO;
+            *stop = YES;
+            return YES;
+        }];
+        if (index != NSNotFound) {
+            WolFoxProLocation *updated = [l copy];
+            updated.name = safeName;
+            [_mutableLocations replaceObjectAtIndex:index withObject:updated];
+        }
+    }
+    return success;
 }
 
 - (void)deleteLocationID:(long long)ID {
@@ -141,6 +209,40 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 }
 
 - (NSArray *)locations { return [_mutableLocations copy]; }
+
+- (NSArray *)locationHistory { return [_mutableLocationHistory copy]; }
+
+- (void)recordLocationHistoryWithName:(NSString *)name coordinate:(CLLocationCoordinate2D)coordinate {
+    if (!CLLocationCoordinate2DIsValid(coordinate)) return;
+    NSString *safeName = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!safeName.length) safeName = @"موقع مستخدم";
+    NSDate *now = [NSDate date];
+    sqlite3_stmt *stmt = NULL;
+    const char *sql = "INSERT INTO location_history (name, lat, lon, used_at) VALUES (?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, [safeName UTF8String], -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 2, coordinate.latitude);
+        sqlite3_bind_double(stmt, 3, coordinate.longitude);
+        sqlite3_bind_double(stmt, 4, now.timeIntervalSince1970);
+        if (sqlite3_step(stmt) == SQLITE_DONE) {
+            WolFoxLocationHistoryEntry *entry = [WolFoxLocationHistoryEntry new];
+            entry.ID = sqlite3_last_insert_rowid(_db);
+            entry.name = safeName;
+            entry.coordinate = coordinate;
+            entry.usedAt = now;
+            [_mutableLocationHistory insertObject:entry atIndex:0];
+            while (_mutableLocationHistory.count > 50) [_mutableLocationHistory removeLastObject];
+        }
+    }
+    if (stmt) sqlite3_finalize(stmt);
+    sqlite3_exec(_db, "DELETE FROM location_history WHERE id NOT IN (SELECT id FROM location_history ORDER BY used_at DESC, id DESC LIMIT 50);", NULL, NULL, NULL);
+}
+
+- (void)clearLocationHistory {
+    if (sqlite3_exec(_db, "DELETE FROM location_history;", NULL, NULL, NULL) == SQLITE_OK) {
+        [_mutableLocationHistory removeAllObjects];
+    }
+}
 
 - (void)loadSettings {
     @synchronized(self) {

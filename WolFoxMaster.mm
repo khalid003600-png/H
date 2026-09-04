@@ -127,6 +127,10 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)floatingIconSizeChanged:(UISegmentedControl *)control;
 - (void)floatingIconOpacityChanged:(UISlider *)slider;
 - (void)resetFloatingIconPosition;
+- (void)showLocationHistory;
+- (void)historySelected:(UIButton *)button;
+- (void)clearLocationHistoryPressed;
+- (void)editFav:(UIButton *)button;
 @end
 
 @implementation WolFoxOverlayWindow
@@ -1072,9 +1076,11 @@ static BOOL WFMasterProcessIsEligible(void) {
         }
     }]];
 
-    NSArray *savedLocations = [WolFoxProStore shared].locations;
+    WolFoxProStore *locationStore = [WolFoxProStore shared];
+    NSArray *savedLocations = locationStore.locations;
+    NSUInteger historyCount = locationStore.locationHistory.count;
     BOOL favoritesEmpty = savedLocations.count == 0;
-    CGFloat favoritesHeight = favoritesEmpty ? 184.0 : 126.0;
+    CGFloat favoritesHeight = favoritesEmpty ? 246.0 : 184.0;
     // favoritesY محسوبة بناءً على kbCard (y=466, h=210) + 15 margin
     CGFloat favoritesY = 466.0 + 210.0 + 15.0; // = 691.0 — ثابتة لمحاذاة المحتوى
     CGFloat cy = favoritesY + favoritesHeight + 15.0;
@@ -1227,6 +1233,22 @@ static BOOL WFMasterProcessIsEligible(void) {
         showFav.accessibilityLabel = @"عرض المواقع المحفوظة";
         [favoritesCard addSubview:showFav];
     }
+
+    UIButton *historyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    CGFloat historyY = favoritesEmpty ? 178.0 : 116.0;
+    historyButton.frame = CGRectMake(16, historyY, favoritesCard.bounds.size.width - 32, 52);
+    historyButton.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.12];
+    historyButton.layer.cornerRadius = 13;
+    [historyButton setTitle:(historyCount ? [NSString stringWithFormat:@"سجل المواقع • %lu", (unsigned long)historyCount] : @"سجل المواقع فارغ") forState:UIControlStateNormal];
+    [historyButton setTitleColor:[WolFoxProTheme accent] forState:UIControlStateNormal];
+    historyButton.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [historyButton setImage:[UIImage systemImageNamed:@"clock.arrow.circlepath"] forState:UIControlStateNormal];
+    historyButton.tintColor = [WolFoxProTheme accent];
+    historyButton.enabled = historyCount > 0;
+    historyButton.alpha = historyCount > 0 ? 1.0 : 0.5;
+    [historyButton addTarget:self action:@selector(showLocationHistory) forControlEvents:UIControlEventTouchUpInside];
+    historyButton.accessibilityLabel = historyCount > 0 ? @"عرض سجل المواقع المستخدمة" : @"سجل المواقع فارغ";
+    [favoritesCard addSubview:historyButton];
 
     UIView *scheduleCard = [[UIView alloc] initWithFrame:CGRectMake(15, cy, w - 30, 72)];
     scheduleCard.backgroundColor = [WolFoxProTheme surfacePrimary];
@@ -2164,6 +2186,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     if (_latInput) _latInput.text = [NSString stringWithFormat:@"%.6f", coordinate.latitude];
     if (_lonInput) _lonInput.text = [NSString stringWithFormat:@"%.6f", coordinate.longitude];
     [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [[WolFoxProStore shared] recordLocationHistoryWithName:(title.length ? title : @"بحث الخريطة") coordinate:coordinate];
     [self showToast:toast];
 }
 
@@ -3192,6 +3215,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [[WolFoxProStore shared] saveSettings];
     [self updateMapPin:c];
     [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [[WolFoxProStore shared] recordLocationHistoryWithName:@"إحداثيات يدوية" coordinate:c];
     [self showRealLocation];
     [self refreshSpoofHeaderStatus];
     [self showToast:@"✅ تم تطبيق الموقع وتشغيل التزييف"];
@@ -3504,17 +3528,24 @@ static BOOL WFMasterProcessIsEligible(void) {
             UIView *row = [[UIView alloc] initWithFrame:CGRectMake(10, cy, 280, 50)];
             row.backgroundColor = [WolFoxProTheme surfaceSecondary]; row.layer.cornerRadius = 12;
             [sv addSubview:row];
-            UILabel *nl = [[UILabel alloc] initWithFrame:CGRectMake(50, 5, 220, 20)];
+            UILabel *nl = [[UILabel alloc] initWithFrame:CGRectMake(94, 5, 176, 20)];
             nl.text = l.name; nl.textColor = [WolFoxProTheme textPrimary]; nl.textAlignment = NSTextAlignmentRight; nl.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
             [row addSubview:nl];
-            UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(50, 25, 220, 20)];
+            UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(94, 25, 176, 20)];
             cl.text = [NSString stringWithFormat:@"%.6f, %.6f", l.coordinate.latitude, l.coordinate.longitude];
             cl.textColor = [WolFoxProTheme textSecondary]; cl.textAlignment = NSTextAlignmentRight; cl.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightMedium];
             [row addSubview:cl];
             UIButton *selB = [UIButton buttonWithType:UIButtonTypeCustom]; selB.frame = row.bounds; selB.tag = i;
             [selB addTarget:self action:@selector(favSelected:) forControlEvents:UIControlEventTouchUpInside];
             [row addSubview:selB];
-            UIButton *delB = [UIButton buttonWithType:UIButtonTypeSystem]; delB.frame = CGRectMake(6, 3, 44, 44);
+            UIButton *editB = [UIButton buttonWithType:UIButtonTypeSystem]; editB.frame = CGRectMake(50, 3, 40, 44);
+            if (@available(iOS 13.0, *)) [editB setImage:[UIImage systemImageNamed:@"pencil"] forState:UIControlStateNormal];
+            editB.tintColor = [WolFoxProTheme accent];
+            objc_setAssociatedObject(editB, "loc_id", @(l.ID), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [editB addTarget:self action:@selector(editFav:) forControlEvents:UIControlEventTouchUpInside];
+            editB.accessibilityLabel = [NSString stringWithFormat:@"تعديل الموقع %@", l.name ?: @""];
+            [row addSubview:editB];
+            UIButton *delB = [UIButton buttonWithType:UIButtonTypeSystem]; delB.frame = CGRectMake(6, 3, 40, 44);
             if (@available(iOS 13.0, *)) [delB setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
             delB.tintColor = [WolFoxProTheme danger];
             objc_setAssociatedObject(delB, "loc_id", @(l.ID), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -3547,11 +3578,76 @@ static BOOL WFMasterProcessIsEligible(void) {
     [store saveSettings];
     [self updateMapPin:l.coordinate];
     [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [store recordLocationHistoryWithName:l.name coordinate:l.coordinate];
     // إبقاء الخريطة متمركزة على الموقع المفضل بدل إعادة تمركزها على الموقع الحقيقي.
     [self centerMapOnPin];
     [self refreshSpoofHeaderStatus];
     [self hidePopup];
     [self showToast:@"تم تثبيت الموقع المفضل وتشغيل التزييف 📍"];
+}
+
+- (void)editFav:(UIButton *)b {
+    NSNumber *locID = objc_getAssociatedObject(b, "loc_id");
+    if (!locID) return;
+    WolFoxProStore *store = [WolFoxProStore shared];
+    WolFoxProLocation *location = nil;
+    for (WolFoxProLocation *candidate in store.locations) {
+        if (candidate.ID == locID.longLongValue) { location = candidate; break; }
+    }
+    if (!location) {
+        [self showToast:@"تعذر العثور على الموقع المحفوظ ❌"];
+        return;
+    }
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"تعديل الموقع" message:@"عدّل الاسم أو الإحداثيات ثم احفظ" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"اسم الموقع";
+        field.text = location.name;
+        field.textAlignment = NSTextAlignmentRight;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"خط العرض";
+        field.text = [NSString stringWithFormat:@"%.6f", location.coordinate.latitude];
+        field.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
+        field.textAlignment = NSTextAlignmentLeft;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
+        field.placeholder = @"خط الطول";
+        field.text = [NSString stringWithFormat:@"%.6f", location.coordinate.longitude];
+        field.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
+        field.textAlignment = NSTextAlignmentLeft;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"حفظ التعديل" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *coordinateText = [NSString stringWithFormat:@"%@,%@", alert.textFields[1].text ?: @"", alert.textFields[2].text ?: @""];
+        CLLocationCoordinate2D updatedCoordinate;
+        if (![self parseCoordinateSearchText:coordinateText coordinate:&updatedCoordinate]) {
+            [self showToast:@"الإحداثيات غير صحيحة؛ تحقق من خط العرض والطول ❌"];
+            return;
+        }
+        WolFoxProLocation *updated = [location copy];
+        NSString *updatedName = [alert.textFields[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        updated.name = updatedName.length ? updatedName : @"موقع محفوظ";
+        CLLocationCoordinate2D previousCoordinate = location.coordinate;
+        updated.coordinate = updatedCoordinate;
+        if (![store updateLocation:updated]) {
+            [self showToast:@"تعذر حفظ التعديل ❌"];
+            return;
+        }
+        BOOL editingActiveCoordinate = store.spoofActive &&
+            fabs(store.currentFakeCoords.latitude - previousCoordinate.latitude) < 0.000001 &&
+            fabs(store.currentFakeCoords.longitude - previousCoordinate.longitude) < 0.000001;
+        if (editingActiveCoordinate) {
+            store.currentFakeCoords = updatedCoordinate;
+            [store saveSettings];
+            [self updateMapPin:updatedCoordinate];
+            [[WolFoxProHookManager shared] deliverFakeUpdate];
+        }
+        [self hidePopup];
+        [self showToast:@"✅ تم تحديث الموقع المحفوظ"];
+        if (self->_activePage == 0) [self switchPage:0];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)deleteFav:(UIButton *)b {
@@ -3563,6 +3659,110 @@ static BOOL WFMasterProcessIsEligible(void) {
         [[WolFoxProStore shared] deleteLocationID:[locID longLongValue]];
         [self hidePopup];
         [self showToast:@"✅ تم حذف الموقع من المفضلة"];
+        if (self->_activePage == 0) [self switchPage:0];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showLocationHistory {
+    NSArray<WolFoxLocationHistoryEntry *> *entries = [WolFoxProStore shared].locationHistory;
+    if (entries.count == 0) {
+        [self showToast:@"سجل المواقع فارغ"];
+        return;
+    }
+    [self showPopupWithTitle:@"سجل المواقع" icon:@"clock.arrow.circlepath" content:^{
+        CGFloat contentHeight = MIN(62.0 + (CGFloat)entries.count * 66.0, 430.0);
+        UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, 300, contentHeight)];
+        scroll.alwaysBounceVertical = YES;
+
+        UIButton *clear = [UIButton buttonWithType:UIButtonTypeSystem];
+        clear.frame = CGRectMake(10, 8, 280, 42);
+        clear.backgroundColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.12];
+        clear.layer.cornerRadius = 12;
+        [clear setTitle:@"مسح سجل المواقع" forState:UIControlStateNormal];
+        [clear setTitleColor:[WolFoxProTheme danger] forState:UIControlStateNormal];
+        clear.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+        if (@available(iOS 13.0, *)) [clear setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
+        clear.tintColor = [WolFoxProTheme danger];
+        [clear addTarget:self action:@selector(clearLocationHistoryPressed) forControlEvents:UIControlEventTouchUpInside];
+        [scroll addSubview:clear];
+
+        NSDateFormatter *formatter = [NSDateFormatter new];
+        formatter.locale = [NSLocale localeWithLocaleIdentifier:@"ar_SA"];
+        formatter.dateFormat = @"dd MMM، HH:mm";
+        CGFloat y = 60.0;
+        for (NSUInteger index = 0; index < entries.count; index++) {
+            WolFoxLocationHistoryEntry *entry = entries[index];
+            UIView *row = [[UIView alloc] initWithFrame:CGRectMake(10, y, 280, 58)];
+            row.backgroundColor = [WolFoxProTheme surfaceSecondary];
+            row.layer.cornerRadius = 12;
+            [scroll addSubview:row];
+
+            UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(42, 4, 226, 20)];
+            nameLabel.text = entry.name;
+            nameLabel.textColor = [WolFoxProTheme textPrimary];
+            nameLabel.textAlignment = NSTextAlignmentRight;
+            nameLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+            [row addSubview:nameLabel];
+
+            UILabel *coordinateLabel = [[UILabel alloc] initWithFrame:CGRectMake(42, 23, 226, 16)];
+            coordinateLabel.text = [NSString stringWithFormat:@"%.6f, %.6f", entry.coordinate.latitude, entry.coordinate.longitude];
+            coordinateLabel.textColor = [WolFoxProTheme textSecondary];
+            coordinateLabel.textAlignment = NSTextAlignmentRight;
+            coordinateLabel.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightMedium];
+            [row addSubview:coordinateLabel];
+
+            UILabel *dateLabel = [[UILabel alloc] initWithFrame:CGRectMake(42, 39, 226, 15)];
+            dateLabel.text = [formatter stringFromDate:entry.usedAt ?: [NSDate date]];
+            dateLabel.textColor = [WolFoxProTheme accent];
+            dateLabel.textAlignment = NSTextAlignmentRight;
+            dateLabel.font = [WolFoxProTheme fontOfSize:9 weight:UIFontWeightSemibold];
+            [row addSubview:dateLabel];
+
+            UIImageView *arrow = [[UIImageView alloc] initWithFrame:CGRectMake(12, 19, 20, 20)];
+            if (@available(iOS 13.0, *)) arrow.image = [UIImage systemImageNamed:@"arrow.counterclockwise.circle.fill"];
+            arrow.tintColor = [WolFoxProTheme accent];
+            arrow.contentMode = UIViewContentModeScaleAspectFit;
+            [row addSubview:arrow];
+
+            UIButton *select = [UIButton buttonWithType:UIButtonTypeCustom];
+            select.frame = row.bounds;
+            select.tag = index;
+            [select addTarget:self action:@selector(historySelected:) forControlEvents:UIControlEventTouchUpInside];
+            select.accessibilityLabel = [NSString stringWithFormat:@"إعادة تفعيل %@", entry.name ?: @"الموقع"];
+            [row addSubview:select];
+            y += 66.0;
+        }
+        scroll.contentSize = CGSizeMake(300, y);
+        return scroll;
+    } btnTitle:@"إغلاق" btnColor:[WolFoxProTheme accent]];
+}
+
+- (void)historySelected:(UIButton *)button {
+    NSArray<WolFoxLocationHistoryEntry *> *entries = [WolFoxProStore shared].locationHistory;
+    if (button.tag < 0 || (NSUInteger)button.tag >= entries.count) return;
+    WolFoxLocationHistoryEntry *entry = entries[button.tag];
+    WolFoxProStore *store = [WolFoxProStore shared];
+    if (store.routeActive) [[WolFoxProHookManager shared] stopRoute];
+    store.currentFakeCoords = entry.coordinate;
+    store.spoofActive = YES;
+    [store saveSettings];
+    [store recordLocationHistoryWithName:entry.name coordinate:entry.coordinate];
+    [self updateMapPin:entry.coordinate];
+    [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [self centerMapOnPin];
+    [self refreshSpoofHeaderStatus];
+    [self hidePopup];
+    [self showToast:@"تمت إعادة تفعيل الموقع من السجل ✅"];
+}
+
+- (void)clearLocationHistoryPressed {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"مسح سجل المواقع؟" message:@"لن تُحذف المواقع المحفوظة في المفضلة." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"مسح" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [[WolFoxProStore shared] clearLocationHistory];
+        [self hidePopup];
+        [self showToast:@"تم مسح سجل المواقع"];
         if (self->_activePage == 0) [self switchPage:0];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -4410,6 +4610,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     store.spoofActive = YES;
     [store saveSettings];
     [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [store recordLocationHistoryWithName:favorite.name coordinate:favorite.coordinate];
     [self refreshFloatingStatusIcon];
     [self refreshSpoofQuickPanel];
     [self.mainVC refreshSpoofHeaderStatus];
