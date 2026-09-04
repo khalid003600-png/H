@@ -92,11 +92,21 @@
     return [[self accent] colorWithAlphaComponent:0.22];
 }
 
-+ (BOOL)reduceMotionEnabled { return UIAccessibilityIsReduceMotionEnabled(); }
++ (BOOL)reduceMotionEnabled {
+    return UIAccessibilityIsReduceMotionEnabled() ||
+           [NSUserDefaults.standardUserDefaults boolForKey:@"WF_REDUCE_MOTION"];
+}
+
 + (NSTimeInterval)transitionDuration { return [self reduceMotionEnabled] ? 0.0 : 0.22; }
 
 + (UIFont *)fontOfSize:(double)size weight:(UIFontWeight)weight {
-    return [UIFont systemFontOfSize:size weight:weight];
+    UIFont *baseFont = [UIFont systemFontOfSize:size weight:weight];
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL dynamicTypeEnabled = [defaults objectForKey:@"WF_DYNAMIC_TYPE_ENABLED"] == nil ||
+                              [defaults boolForKey:@"WF_DYNAMIC_TYPE_ENABLED"];
+    if (!dynamicTypeEnabled) return baseFont;
+    UIFontMetrics *metrics = [UIFontMetrics metricsForTextStyle:UIFontTextStyleBody];
+    return [metrics scaledFontForFont:baseFont maximumPointSize:MAX(size, size * 1.35)];
 }
 
 + (UIBlurEffectStyle)blurStyle {

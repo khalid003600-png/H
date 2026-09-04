@@ -7,3 +7,6 @@ WolFox_v*_Rootless.deb
 WolFoxTargetBundles.txt
 *.log
 *.o
+
+SHA256SUMS
+BUILD_MANIFEST.txt

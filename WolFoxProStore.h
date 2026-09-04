@@ -13,6 +13,22 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 @property (nonatomic, assign) double altitude;
 @end
 
+@interface WolFoxLocationHistoryEntry : NSObject <NSCopying>
+@property (nonatomic, assign) long long ID;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) CLLocationCoordinate2D coordinate;
+@property (nonatomic, strong) NSDate *usedAt;
+@end
+
+@interface WolFoxLocationProfile : NSObject <NSCopying>
+@property (nonatomic, copy) NSString *profileID;
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) CLLocationCoordinate2D coordinate;
+@property (nonatomic, assign) double speed;
+@property (nonatomic, assign) NSTimeInterval updateIntervalSeconds;
+@property (nonatomic, assign) BOOL jitterEnabled;
+@end
+
 @interface WolFoxProIdentifier : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *uuid;
 @property (nonatomic, copy) NSString *name;
@@ -34,7 +50,19 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 // Locations (SQLite based)
 @property (readonly, copy, nonatomic) NSArray<WolFoxProLocation *> *locations;
 - (long long)saveLocation:(WolFoxProLocation *)location;
+- (BOOL)updateLocation:(WolFoxProLocation *)location;
 - (void)deleteLocationID:(long long)ID;
+
+// Recent location usage (SQLite based, capped at 50)
+@property (readonly, copy, nonatomic) NSArray<WolFoxLocationHistoryEntry *> *locationHistory;
+- (void)recordLocationHistoryWithName:(NSString *)name coordinate:(CLLocationCoordinate2D)coordinate;
+- (void)clearLocationHistory;
+
+// Quick location profiles (Defaults based, capped at 25)
+@property (readonly, copy, nonatomic) NSArray<WolFoxLocationProfile *> *locationProfiles;
+- (void)saveLocationProfile:(WolFoxLocationProfile *)profile;
+- (void)deleteLocationProfileID:(NSString *)profileID;
+- (void)clearLocationProfiles;
 
 // Identifiers (Defaults based)
 @property (readonly, copy, nonatomic) NSArray<WolFoxProIdentifier *> *identifiers;
@@ -50,6 +78,8 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 @property (nonatomic, assign) BOOL jitterActive;
 @property (nonatomic, assign) BOOL volumeGestureEnabled;
 @property (nonatomic, assign) CLLocationCoordinate2D currentFakeCoords;
+/// المفضلة التي فعّلت الموقع الثابت حالياً؛ صفر عند التفعيل اليدوي أو المسار.
+@property (nonatomic, assign) long long activeLocationID;
 @property (nonatomic, assign) NSInteger themeIndex;
 @property (nonatomic, assign) NSInteger mapStyle; // 0: Standard, 1: Satellite, 2: Hybrid
 @property (nonatomic, assign) double simSpeed;
