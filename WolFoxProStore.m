@@ -390,6 +390,13 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     NSNumber *savedTargetLon = [u objectForKey:@"WF_PRO_TARGET_LON"];
     if ([savedTargetLat isKindOfClass:NSNumber.class] && [savedTargetLon isKindOfClass:NSNumber.class]) {
         self.targetRouteCoords = CLLocationCoordinate2DMake(savedTargetLat.doubleValue, savedTargetLon.doubleValue);
+    } else {
+        self.targetRouteCoords = CLLocationCoordinate2DMake(0.0, 0.0);
+    }
+    if (!CLLocationCoordinate2DIsValid(self.targetRouteCoords)) {
+        self.targetRouteCoords = CLLocationCoordinate2DMake(0.0, 0.0);
+        [u removeObjectForKey:@"WF_PRO_TARGET_LAT"];
+        [u removeObjectForKey:@"WF_PRO_TARGET_LON"];
     }
     self.spoofedImagePath = [u stringForKey:@"WF_PRO_CAM_IMG"];
     self.mediaUploadActive = [u boolForKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
@@ -440,32 +447,76 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     // Load Identifiers from Defaults (simulated structured store)
     _mutableIdentifiers = [NSMutableArray new];
     NSArray *ids = [u arrayForKey:@"WF_PRO_IDS"] ?: @[];
-    for (NSDictionary *d in ids) {
-        NSUUID *savedUUID = [[NSUUID alloc] initWithUUIDString:d[@"uuid"]];
-        if (!savedUUID) continue;
+    NSMutableSet<NSString *> *seenIdentifierUUIDs = [NSMutableSet new];
+    for (id rawIdentifier in ids) {
+        if (![rawIdentifier isKindOfClass:[NSDictionary class]]) continue;
+        NSDictionary *d = (NSDictionary *)rawIdentifier;
+        NSString *uuidValue = [d[@"uuid"] isKindOfClass:[NSString class]] ? d[@"uuid"] : nil;
+        NSUUID *savedUUID = [[NSUUID alloc] initWithUUIDString:uuidValue];
+        if (!savedUUID || [seenIdentifierUUIDs containsObject:savedUUID.UUIDString]) continue;
         WolFoxProIdentifier *i = [WolFoxProIdentifier new];
-        i.uuid = savedUUID.UUIDString; i.name = d[@"name"];
-        NSString *dateStr = d[@"date"];
-        i.createdAt = dateStr ? [NSDate dateWithTimeIntervalSince1970:[dateStr doubleValue]] : [NSDate date];
+        i.uuid = savedUUID.UUIDString;
+        NSString *rawName = [d[@"name"] isKindOfClass:[NSString class]] ? d[@"name"] : @"";
+        NSString *trimmedName = [rawName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        i.name = trimmedName.length ? trimmedName : @"هوية محفوظة";
+        id dateValue = d[@"date"];
+        NSTimeInterval timestamp = [dateValue respondsToSelector:@selector(doubleValue)] ? [dateValue doubleValue] : NSDate.date.timeIntervalSince1970;
+        i.createdAt = [NSDate dateWithTimeIntervalSince1970:timestamp];
+        [seenIdentifierUUIDs addObject:i.uuid];
         [_mutableIdentifiers addObject:i];
+        if (_mutableIdentifiers.count >= 50) break;
     }
     NSUUID *activeUUID = [[NSUUID alloc] initWithUUIDString:[u stringForKey:@"WF_PRO_ACTIVE_ID"]];
     self.activeIdentifierUUID = activeUUID.UUIDString;
-    if (!activeUUID) [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
+    if (activeUUID && ![seenIdentifierUUIDs containsObject:activeUUID.UUIDString]) {
+        self.activeIdentifierUUID = nil;
+    }
+    if (!self.activeIdentifierUUID.length) [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
     
     self.bluetoothActive = [u boolForKey:@"WF_PRO_BT_ACT"];
     self.activeBleProfileID = [u stringForKey:@"WF_PRO_BT_ACTIVE_ID"];
     NSArray *rawProfiles = [u arrayForKey:@"WF_PRO_BT_PROFILES"] ?: @[];
     self.savedBleProfiles = [NSMutableArray new];
-    for (NSDictionary *d in rawProfiles) {
-        if (![d isKindOfClass:[NSDictionary class]]) continue;
+    NSMutableSet<NSString *> *seenBleProfileIDs = [NSMutableSet new];
+    NSMutableSet<NSString *> *seenBleUUIDs = [NSMutableSet new];
+    for (id rawProfile in rawProfiles) {
+        if (![rawProfile isKindOfClass:[NSDictionary class]]) continue;
+        NSDictionary *d = (NSDictionary *)rawProfile;
+        NSString *uuidValue = [d[@"uuid"] isKindOfClass:[NSString class]] ? d[@"uuid"] : nil;
+        NSUUID *profileUUID = [[NSUUID alloc] initWithUUIDString:uuidValue];
+        if (!profileUUID || [seenBleUUIDs containsObject:profileUUID.UUIDString]) continue;
+        NSString *profileID = [d[@"profileID"] isKindOfClass:[NSString class]] ? d[@"profileID"] : nil;
+        profileID = [profileID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (!profileID.length) profileID = NSUUID.UUID.UUIDString;
+        if ([seenBleProfileIDs containsObject:profileID]) continue;
+
         WolFoxBleProfile *p = [WolFoxBleProfile new];
-        p.profileID = d[@"profileID"] ?: [[NSUUID UUID] UUIDString];
-        p.name      = d[@"name"] ?: @"جهاز غير معروف";
-        p.uuid      = d[@"uuid"] ?: @"";
-        p.localName = d[@"localName"] ?: @"";
-        p.rssi      = [d[@"rssi"] integerValue];
+        p.profileID = profileID;
+        NSString *rawName = [d[@"name"] isKindOfClass:[NSString class]] ? d[@"name"] : @"";
+        NSString *rawLocalName = [d[@"localName"] isKindOfClass:[NSString class]] ? d[@"localName"] : @"";
+        p.name = [[rawName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] copy];
+        if (!p.name.length) p.name = @"جهاز غير معروف";
+        p.uuid = profileUUID.UUIDString;
+        p.localName = [rawLocalName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSInteger rawRSSI = [d[@"rssi"] respondsToSelector:@selector(integerValue)] ? [d[@"rssi"] integerValue] : -60;
+        p.rssi = MAX(-127, MIN(20, rawRSSI));
+        [seenBleProfileIDs addObject:p.profileID];
+        [seenBleUUIDs addObject:p.uuid];
         [self.savedBleProfiles addObject:p];
+        if (self.savedBleProfiles.count >= 25) break;
+    }
+    BOOL activeProfileFound = NO;
+    for (WolFoxBleProfile *profile in self.savedBleProfiles) {
+        if ([profile.profileID isEqualToString:self.activeBleProfileID]) {
+            activeProfileFound = YES;
+            break;
+        }
+    }
+    if (self.activeBleProfileID.length && !activeProfileFound) {
+        self.activeBleProfileID = nil;
+        self.bluetoothActive = NO;
+        [u removeObjectForKey:@"WF_PRO_BT_ACTIVE_ID"];
+        [u setBool:NO forKey:@"WF_PRO_BT_ACT"];
     }
     } // @synchronized
 }
@@ -504,8 +555,11 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         
         NSMutableArray *ids = [NSMutableArray new];
         for (WolFoxProIdentifier *i in _mutableIdentifiers) {
+            NSUUID *validUUID = [[NSUUID alloc] initWithUUIDString:i.uuid];
+            if (!validUUID) continue;
             NSString *dateStr = i.createdAt ? [NSString stringWithFormat:@"%.0f", [(NSDate*)i.createdAt timeIntervalSince1970]] : [NSString stringWithFormat:@"%.0f", [[NSDate date] timeIntervalSince1970]];
-            [ids addObject:@{@"uuid": i.uuid ?: @"", @"name": i.name ?: @"", @"date": dateStr}];
+            [ids addObject:@{@"uuid": validUUID.UUIDString, @"name": i.name ?: @"هوية محفوظة", @"date": dateStr}];
+            if (ids.count >= 50) break;
         }
         [u setObject:ids forKey:@"WF_PRO_IDS"];
         if (self.activeIdentifierUUID) [u setObject:self.activeIdentifierUUID forKey:@"WF_PRO_ACTIVE_ID"];
@@ -516,13 +570,16 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         else [u removeObjectForKey:@"WF_PRO_BT_ACTIVE_ID"];
         NSMutableArray *rawProfiles = [NSMutableArray new];
         for (WolFoxBleProfile *p in self.savedBleProfiles) {
+            NSUUID *validUUID = [[NSUUID alloc] initWithUUIDString:p.uuid];
+            if (!validUUID || !p.profileID.length) continue;
             [rawProfiles addObject:@{
-                @"profileID": p.profileID ?: @"",
-                @"name":      p.name ?: @"",
-                @"uuid":      p.uuid ?: @"",
+                @"profileID": p.profileID,
+                @"name":      p.name ?: @"جهاز غير معروف",
+                @"uuid":      validUUID.UUIDString,
                 @"localName": p.localName ?: @"",
-                @"rssi":      @(p.rssi)
+                @"rssi":      @(MAX(-127, MIN(20, p.rssi)))
             }];
+            if (rawProfiles.count >= 25) break;
         }
         [u setObject:rawProfiles forKey:@"WF_PRO_BT_PROFILES"];
         
@@ -542,14 +599,22 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 }
 
 - (void)saveIdentifier:(WolFoxProIdentifier *)i {
+    if (!i) return;
     NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:i.uuid];
     if (!uuid) return;
-    i.uuid = uuid.UUIDString;
-    for (WolFoxProIdentifier *existing in [_mutableIdentifiers copy]) {
-        if ([existing.uuid isEqualToString:i.uuid]) [_mutableIdentifiers removeObject:existing];
+    WolFoxProIdentifier *safeIdentifier = [i copy];
+    safeIdentifier.uuid = uuid.UUIDString;
+    NSString *trimmedName = [safeIdentifier.name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    safeIdentifier.name = trimmedName.length ? trimmedName : @"هوية محفوظة";
+    if (!safeIdentifier.createdAt) safeIdentifier.createdAt = NSDate.date;
+    @synchronized(self) {
+        for (WolFoxProIdentifier *existing in [_mutableIdentifiers copy]) {
+            if ([existing.uuid isEqualToString:safeIdentifier.uuid]) [_mutableIdentifiers removeObject:existing];
+        }
+        [_mutableIdentifiers insertObject:safeIdentifier atIndex:0];
+        while (_mutableIdentifiers.count > 50) [_mutableIdentifiers removeLastObject];
+        [self saveSettings];
     }
-    [_mutableIdentifiers addObject:i];
-    [self saveSettings];
 }
 
 - (NSUUID *)validatedActiveIdentifier {
@@ -574,7 +639,8 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         identifier.uuid = self.activeIdentifierUUID;
         identifier.name = @"هوية موحدة";
         identifier.createdAt = [NSDate date];
-        [_mutableIdentifiers addObject:identifier];
+        [_mutableIdentifiers insertObject:identifier atIndex:0];
+        while (_mutableIdentifiers.count > 50) [_mutableIdentifiers removeLastObject];
     }
     [self saveSettings];
     [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_IDENTIFIER_CHANGED" object:self.activeIdentifierUUID];
@@ -606,16 +672,29 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 - (NSArray *)identifiers { return [_mutableIdentifiers copy]; }
 
 - (void)saveBleProfile:(WolFoxBleProfile *)profile {
-    if (!profile.profileID) profile.profileID = [[NSUUID UUID] UUIDString];
-    @synchronized(self.savedBleProfiles) {
+    if (!profile) return;
+    NSUUID *validUUID = [[NSUUID alloc] initWithUUIDString:profile.uuid];
+    if (!validUUID) return;
+    WolFoxBleProfile *safeProfile = [profile copy];
+    safeProfile.uuid = validUUID.UUIDString;
+    safeProfile.profileID = [safeProfile.profileID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (!safeProfile.profileID.length) safeProfile.profileID = NSUUID.UUID.UUIDString;
+    NSString *trimmedName = [safeProfile.name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    safeProfile.name = trimmedName.length ? trimmedName : @"جهاز غير معروف";
+    safeProfile.localName = [safeProfile.localName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+    safeProfile.rssi = MAX(-127, MIN(20, safeProfile.rssi));
+    @synchronized(self) {
+        if (!self.savedBleProfiles) self.savedBleProfiles = [NSMutableArray new];
         for (WolFoxBleProfile *p in [self.savedBleProfiles copy]) {
-            if ([p.profileID isEqualToString:profile.profileID]) {
-                [self.savedBleProfiles removeObject:p]; break;
+            if ([p.profileID isEqualToString:safeProfile.profileID] ||
+                [p.uuid isEqualToString:safeProfile.uuid]) {
+                [self.savedBleProfiles removeObject:p];
             }
         }
-        [self.savedBleProfiles insertObject:profile atIndex:0];
+        [self.savedBleProfiles insertObject:safeProfile atIndex:0];
+        while (self.savedBleProfiles.count > 25) [self.savedBleProfiles removeLastObject];
+        [self saveSettings];
     }
-    [self saveSettings];
 }
 
 - (void)deleteBleProfileID:(NSString *)profileID {
