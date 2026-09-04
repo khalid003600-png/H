@@ -40,6 +40,10 @@ static BOOL WFMasterProcessIsEligible(void) {
 @interface WolFoxController : NSObject <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) WolFoxMainViewController *mainVC;
 @property (nonatomic, strong) UIButton *floatingIcon;
+@property (nonatomic, strong) UIView *spoofQuickPanel;
+@property (nonatomic, strong) UILabel *spoofQuickStatusLabel;
+@property (nonatomic, strong) UIButton *spoofQuickToggleButton;
+@property (nonatomic, strong) UIButton *spoofQuickFavoriteButton;
 @property (nonatomic, strong) UIButton *cameraIcon;
 @property (nonatomic, strong) UIView *floatingControlPanel;
 @property (nonatomic, strong) UILabel *floatingStatusLabel;
@@ -79,6 +83,15 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)handleFloatingStatusTap:(UIButton *)sender;
 - (void)handleFloatingStatusPan:(UIPanGestureRecognizer *)gesture;
 - (void)setFloatingStatusIconVisible:(BOOL)visible;
+- (void)applyFloatingStatusPreferences;
+- (void)resetFloatingStatusPosition;
+- (void)toggleSpoofQuickPanel:(nullable UIButton *)sender;
+- (void)closeSpoofQuickPanel:(nullable UIButton *)sender;
+- (void)refreshSpoofQuickPanel;
+- (void)toggleSpoofFromQuickPanel:(nullable UIButton *)sender;
+- (void)openMapFromQuickPanel:(nullable UIButton *)sender;
+- (void)activateFavoriteFromQuickPanel:(nullable UIButton *)sender;
+- (void)handleFloatingStatusLongPress:(UILongPressGestureRecognizer *)gesture;
 - (void)closeFloatingControlPanel:(nullable UIButton *)sender;
 - (void)prepareVirtualCameraLongPress;
 @end
@@ -109,6 +122,11 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)refreshRealLocationPinWithoutRecentering;
 - (void)presentOnboardingIfNeeded;
 - (void)refreshVirtualCameraPage;
+- (void)openGPSPage;
+- (void)volumePressCountChanged:(UISegmentedControl *)control;
+- (void)floatingIconSizeChanged:(UISegmentedControl *)control;
+- (void)floatingIconOpacityChanged:(UISlider *)slider;
+- (void)resetFloatingIconPosition;
 @end
 
 @implementation WolFoxOverlayWindow
@@ -127,6 +145,10 @@ static BOOL WFMasterProcessIsEligible(void) {
     Class ctrlCls = objc_getClass("WolFoxController");
     if (ctrlCls) {
         WolFoxController *ctrl = [ctrlCls shared];
+        if (ctrl && ctrl.spoofQuickPanel && !ctrl.spoofQuickPanel.hidden && ctrl.spoofQuickPanel.alpha > 0.1) {
+            CGPoint quickPoint = [self convertPoint:point toView:ctrl.spoofQuickPanel];
+            if ([ctrl.spoofQuickPanel pointInside:quickPoint withEvent:event]) return [super hitTest:point withEvent:event];
+        }
         if (ctrl && ctrl.floatingControlPanel && !ctrl.floatingControlPanel.hidden && ctrl.floatingControlPanel.alpha > 0.1) {
             CGPoint panelPoint = [self convertPoint:point toView:ctrl.floatingControlPanel];
             if ([ctrl.floatingControlPanel pointInside:panelPoint withEvent:event]) return [super hitTest:point withEvent:event];
@@ -492,6 +514,10 @@ static BOOL WFMasterProcessIsEligible(void) {
 }
 
 - (void)tabBtnPressed:(UIButton *)b { [self switchPage:b.tag]; }
+
+- (void)openGPSPage {
+    [self switchPage:0];
+}
 
 - (void)switchPage:(NSInteger)page {
     if (_mapExpanded) [self closeExpandedMapIfNeeded];
@@ -2650,6 +2676,31 @@ static BOOL WFMasterProcessIsEligible(void) {
     [v addSubview:sw]; return v;
 }
 
+- (void)volumePressCountChanged:(UISegmentedControl *)control {
+    NSArray<NSNumber *> *values = @[@2, @3, @5];
+    if (control.selectedSegmentIndex < 0 || control.selectedSegmentIndex >= (NSInteger)values.count) return;
+    NSInteger count = values[control.selectedSegmentIndex].integerValue;
+    [[NSUserDefaults standardUserDefaults] setInteger:count forKey:@"WF_VOLUME_PRESS_COUNT"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [self showToast:[NSString stringWithFormat:@"سيتم إظهار الواجهة بعد %ld ضغطات صوت", (long)count]];
+}
+
+- (void)floatingIconSizeChanged:(UISegmentedControl *)control {
+    [[NSUserDefaults standardUserDefaults] setInteger:control.selectedSegmentIndex forKey:@"WF_FLOATING_STATUS_SIZE_INDEX"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [[WolFoxController shared] applyFloatingStatusPreferences];
+}
+
+- (void)floatingIconOpacityChanged:(UISlider *)slider {
+    [[NSUserDefaults standardUserDefaults] setFloat:slider.value forKey:@"WF_FLOATING_STATUS_OPACITY"];
+    [[WolFoxController shared] applyFloatingStatusPreferences];
+}
+
+- (void)resetFloatingIconPosition {
+    [[WolFoxController shared] resetFloatingStatusPosition];
+    [self showToast:@"تمت إعادة العلامة إلى مكانها الافتراضي"];
+}
+
 - (void)setupSettingsPage {
     CGFloat w = _scrollDashboard.bounds.size.width;
     CGFloat cy = 10;
@@ -2683,8 +2734,10 @@ static BOOL WFMasterProcessIsEligible(void) {
     secLabel(@"الظهور والإخفاء", cy);
     cy += 24;
     UIView *visCard = newCard(cy, 210);
+    NSInteger requiredPresses = [[NSUserDefaults standardUserDefaults] integerForKey:@"WF_VOLUME_PRESS_COUNT"];
+    if (requiredPresses != 2 && requiredPresses != 3 && requiredPresses != 5) requiredPresses = 3;
     [visCard addSubview:[self royalSwitchInside:visCard
-        t:@"إظهار الواجهة بـ 3 ضغطات على الصوت"
+        t:[NSString stringWithFormat:@"إظهار الواجهة بـ %ld ضغطات على الصوت", (long)requiredPresses]
         i:@"speaker.wave.2.fill"
         isOn:[WolFoxProStore shared].volumeGestureEnabled
         y:0
@@ -2692,7 +2745,7 @@ static BOOL WFMasterProcessIsEligible(void) {
             [WolFoxProStore shared].volumeGestureEnabled = s.on;
             [[WolFoxProStore shared] saveSettings];
             [self showToast:s.on
-                ? @"اضغط زر الصوت 3 مرات سريعاً لإظهار الواجهة"
+                ? [NSString stringWithFormat:@"اضغط زر الصوت %ld مرات سريعاً لإظهار الواجهة", (long)requiredPresses]
                 : @"تم إيقاف زر الصوت"];
     }]];
     BOOL hiddenOnLaunch = [[NSUserDefaults standardUserDefaults] boolForKey:WFUIHiddenOnLaunchKey];
@@ -2724,9 +2777,67 @@ static BOOL WFMasterProcessIsEligible(void) {
             [[WolFoxController shared] setFloatingStatusIconVisible:s.on];
             [self showToast:s.on
                 ? @"العلامة العائمة ظاهرة الآن"
-                : @"تم إخفاء العلامة — اضغط زر الصوت 3 مرات لفتح الإعدادات"];
+                : [NSString stringWithFormat:@"تم إخفاء العلامة — اضغط زر الصوت %ld مرات لفتح الإعدادات", (long)requiredPresses]];
     }]];
     cy += 210 + 18;
+
+    // ════════════════════════════════════════════════════════
+    // تخصيص العلامة العائمة
+    // ════════════════════════════════════════════════════════
+    secLabel(@"تخصيص العلامة العائمة", cy);
+    cy += 24;
+    UIView *floatingCard = newCard(cy, 238);
+
+    UILabel *pressLabel = [[UILabel alloc] initWithFrame:CGRectMake(150, 0, floatingCard.bounds.size.width - 165, 60)];
+    pressLabel.text = @"عدد ضغطات الصوت";
+    pressLabel.textAlignment = NSTextAlignmentRight;
+    pressLabel.textColor = [WolFoxProTheme textPrimary];
+    pressLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    [floatingCard addSubview:pressLabel];
+    UISegmentedControl *pressControl = [[UISegmentedControl alloc] initWithItems:@[@"2", @"3", @"5"]];
+    pressControl.frame = CGRectMake(12, 14, 128, 32);
+    pressControl.selectedSegmentIndex = requiredPresses == 2 ? 0 : (requiredPresses == 5 ? 2 : 1);
+    [pressControl addTarget:self action:@selector(volumePressCountChanged:) forControlEvents:UIControlEventValueChanged];
+    [floatingCard addSubview:pressControl];
+
+    UILabel *sizeLabel = [[UILabel alloc] initWithFrame:CGRectMake(150, 60, floatingCard.bounds.size.width - 165, 60)];
+    sizeLabel.text = @"حجم العلامة";
+    sizeLabel.textAlignment = NSTextAlignmentRight;
+    sizeLabel.textColor = [WolFoxProTheme textPrimary];
+    sizeLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    [floatingCard addSubview:sizeLabel];
+    UISegmentedControl *sizeControl = [[UISegmentedControl alloc] initWithItems:@[@"صغير", @"وسط", @"كبير"]];
+    sizeControl.frame = CGRectMake(12, 74, 128, 32);
+    NSInteger sizeIndex = [[NSUserDefaults standardUserDefaults] integerForKey:@"WF_FLOATING_STATUS_SIZE_INDEX"];
+    sizeControl.selectedSegmentIndex = MIN(MAX(sizeIndex, 0), 2);
+    [sizeControl addTarget:self action:@selector(floatingIconSizeChanged:) forControlEvents:UIControlEventValueChanged];
+    [floatingCard addSubview:sizeControl];
+
+    UILabel *opacityLabel = [[UILabel alloc] initWithFrame:CGRectMake(150, 120, floatingCard.bounds.size.width - 165, 60)];
+    opacityLabel.text = @"شفافية العلامة";
+    opacityLabel.textAlignment = NSTextAlignmentRight;
+    opacityLabel.textColor = [WolFoxProTheme textPrimary];
+    opacityLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    [floatingCard addSubview:opacityLabel];
+    UISlider *opacitySlider = [[UISlider alloc] initWithFrame:CGRectMake(12, 135, 128, 30)];
+    opacitySlider.minimumValue = 0.45;
+    opacitySlider.maximumValue = 1.0;
+    opacitySlider.tintColor = [WolFoxProTheme accent];
+    opacitySlider.value = [[NSUserDefaults standardUserDefaults] objectForKey:@"WF_FLOATING_STATUS_OPACITY"]
+        ? [[NSUserDefaults standardUserDefaults] floatForKey:@"WF_FLOATING_STATUS_OPACITY"] : 0.92;
+    [opacitySlider addTarget:self action:@selector(floatingIconOpacityChanged:) forControlEvents:UIControlEventValueChanged];
+    [floatingCard addSubview:opacitySlider];
+
+    UIButton *resetFloating = [UIButton buttonWithType:UIButtonTypeSystem];
+    resetFloating.frame = CGRectMake(12, 183, floatingCard.bounds.size.width - 24, 43);
+    resetFloating.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.14];
+    resetFloating.layer.cornerRadius = 12;
+    [resetFloating setTitle:@"إعادة العلامة إلى مكانها الافتراضي" forState:UIControlStateNormal];
+    [resetFloating setTitleColor:[WolFoxProTheme accent] forState:UIControlStateNormal];
+    resetFloating.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    [resetFloating addTarget:self action:@selector(resetFloatingIconPosition) forControlEvents:UIControlEventTouchUpInside];
+    [floatingCard addSubview:resetFloating];
+    cy += 238 + 18;
 
 // 4. التنبيهات
     // ════════════════════════════════════════════════════════
@@ -3615,6 +3726,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)spoofStateChangedForController:(__unused NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self refreshFloatingStatusIcon];
+        [self refreshSpoofQuickPanel];
         [self.mainVC refreshSpoofHeaderStatus];
     });
 }
@@ -3838,10 +3950,12 @@ static BOOL WFMasterProcessIsEligible(void) {
     if (now - self.lastVolumePulseTime > 1.50) self.volumePulseCount = 0;
     self.lastVolumePulseTime = now;
     self.volumePulseCount++;
+    NSInteger requiredPresses = [[NSUserDefaults standardUserDefaults] integerForKey:@"WF_VOLUME_PRESS_COUNT"];
+    if (requiredPresses != 2 && requiredPresses != 3 && requiredPresses != 5) requiredPresses = 3;
 #ifdef DEBUG
-    WFLog(@"[WolFox][UI] volume_request_progress=%ld/3", (long)MIN(self.volumePulseCount, 3));
+    WFLog(@"[WolFox][UI] volume_request_progress=%ld/%ld", (long)MIN(self.volumePulseCount, requiredPresses), (long)requiredPresses);
 #endif
-    if (self.volumePulseCount >= 3 && now - self.lastVolumeToggleTime > 0.85) {
+    if (self.volumePulseCount >= requiredPresses && now - self.lastVolumeToggleTime > 0.85) {
         self.volumePulseCount = 0;
         self.lastVolumeToggleTime = now;
         UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
@@ -3942,7 +4056,11 @@ static BOOL WFMasterProcessIsEligible(void) {
     self.floatingIcon.accessibilityHint = @"اضغط لفتح لوحة WolFox أو اسحب لتحريك العلامة";
     [self.floatingIcon addTarget:self action:@selector(handleFloatingStatusTap:) forControlEvents:UIControlEventTouchUpInside];
     [self.floatingIcon addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleFloatingStatusPan:)]];
+    UILongPressGestureRecognizer *hidePress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleFloatingStatusLongPress:)];
+    hidePress.minimumPressDuration = 0.85;
+    [self.floatingIcon addGestureRecognizer:hidePress];
     [self.overlayWindow addSubview:self.floatingIcon];
+    [self applyFloatingStatusPreferences];
     BOOL iconVisible = ![[NSUserDefaults standardUserDefaults] objectForKey:@"WF_FLOATING_STATUS_VISIBLE"] ||
                        [[NSUserDefaults standardUserDefaults] boolForKey:@"WF_FLOATING_STATUS_VISIBLE"];
     self.floatingIcon.hidden = !iconVisible;
@@ -4084,11 +4202,38 @@ static BOOL WFMasterProcessIsEligible(void) {
     [[NSUserDefaults standardUserDefaults] setBool:visible forKey:@"WF_FLOATING_STATUS_VISIBLE"];
     [[NSUserDefaults standardUserDefaults] synchronize];
     self.floatingIcon.hidden = !visible;
+    if (!visible) [self closeSpoofQuickPanel:nil];
     if (visible) {
         self.overlayWindow.hidden = NO;
         [self refreshFloatingStatusIcon];
         [self.overlayWindow bringSubviewToFront:self.floatingIcon];
     }
+}
+
+- (void)applyFloatingStatusPreferences {
+    if (!self.floatingIcon) return;
+    NSInteger index = [[NSUserDefaults standardUserDefaults] integerForKey:@"WF_FLOATING_STATUS_SIZE_INDEX"];
+    CGFloat size = index == 0 ? 48.0 : (index == 2 ? 64.0 : 56.0);
+    CGFloat opacity = [[NSUserDefaults standardUserDefaults] objectForKey:@"WF_FLOATING_STATUS_OPACITY"]
+        ? [[NSUserDefaults standardUserDefaults] doubleForKey:@"WF_FLOATING_STATUS_OPACITY"] : 0.92;
+    opacity = MIN(MAX(opacity, 0.45), 1.0);
+    CGPoint center = self.floatingIcon.center;
+    self.floatingIcon.bounds = CGRectMake(0, 0, size, size);
+    self.floatingIcon.center = center;
+    self.floatingIcon.layer.cornerRadius = size * 0.5;
+    self.floatingIcon.alpha = opacity;
+    [self handleFloatingStatusPan:nil];
+}
+
+- (void)resetFloatingStatusPosition {
+    if (!self.floatingIcon) return;
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"WF_FLOATING_STATUS_X"];
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"WF_FLOATING_STATUS_Y"];
+    CGFloat size = CGRectGetWidth(self.floatingIcon.bounds);
+    CGFloat x = self.overlayWindow.bounds.size.width - size * 0.5 - 18.0;
+    CGFloat y = MAX(96.0, self.overlayWindow.safeAreaInsets.top + 72.0) + size * 0.5;
+    self.floatingIcon.center = CGPointMake(x, y);
+    [self.overlayWindow bringSubviewToFront:self.floatingIcon];
 }
 
 - (void)refreshFloatingStatusIcon {
@@ -4101,16 +4246,182 @@ static BOOL WFMasterProcessIsEligible(void) {
 }
 
 - (void)handleFloatingStatusTap:(UIButton *)sender {
+    [self toggleSpoofQuickPanel:sender];
+}
+
+- (void)handleFloatingStatusLongPress:(UILongPressGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateBegan) return;
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [feedback impactOccurred];
+    [self setFloatingStatusIconVisible:NO];
+}
+
+- (void)toggleSpoofQuickPanel:(UIButton *)sender {
     (void)sender;
-    [self toggleUI];
+    if (self.spoofQuickPanel && !self.spoofQuickPanel.hidden) {
+        [self closeSpoofQuickPanel:nil];
+        return;
+    }
+    if (![WFLicenseClient isRuntimeLicenseValid]) {
+        [self showActivationScreenWithResult:[WFLicenseClient lastLicenseResult]];
+        return;
+    }
+
+    if (!self.spoofQuickPanel) {
+        CGFloat width = MIN(292.0, self.overlayWindow.bounds.size.width - 28.0);
+        self.spoofQuickPanel = [[UIView alloc] initWithFrame:CGRectMake(14, 120, width, 242)];
+        self.spoofQuickPanel.backgroundColor = [WolFoxProTheme surfacePrimary];
+        self.spoofQuickPanel.layer.cornerRadius = 22.0;
+        self.spoofQuickPanel.layer.borderWidth = 1.5;
+        self.spoofQuickPanel.layer.borderColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.72].CGColor;
+        self.spoofQuickPanel.layer.shadowColor = UIColor.blackColor.CGColor;
+        self.spoofQuickPanel.layer.shadowOpacity = 0.42;
+        self.spoofQuickPanel.layer.shadowRadius = 16.0;
+        self.spoofQuickPanel.layer.shadowOffset = CGSizeMake(0, 8);
+
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(48, 12, width - 62, 24)];
+        title.text = @"تحكم WolFox السريع";
+        title.textAlignment = NSTextAlignmentRight;
+        title.textColor = [WolFoxProTheme textPrimary];
+        title.font = [WolFoxProTheme fontOfSize:16 weight:UIFontWeightBlack];
+        [self.spoofQuickPanel addSubview:title];
+
+        UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+        close.frame = CGRectMake(8, 7, 36, 36);
+        if (@available(iOS 13.0, *)) [close setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
+        close.tintColor = [WolFoxProTheme textSecondary];
+        close.accessibilityLabel = @"إغلاق التحكم السريع";
+        [close addTarget:self action:@selector(closeSpoofQuickPanel:) forControlEvents:UIControlEventTouchUpInside];
+        [self.spoofQuickPanel addSubview:close];
+
+        self.spoofQuickStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 42, width - 28, 25)];
+        self.spoofQuickStatusLabel.textAlignment = NSTextAlignmentCenter;
+        self.spoofQuickStatusLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+        [self.spoofQuickPanel addSubview:self.spoofQuickStatusLabel];
+
+        UIButton *(^quickButton)(NSString *, NSString *, CGFloat) = ^UIButton *(NSString *text, NSString *symbol, CGFloat y) {
+            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+            button.frame = CGRectMake(14, y, width - 28, 46);
+            button.layer.cornerRadius = 13.0;
+            button.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
+            [button setTitle:text forState:UIControlStateNormal];
+            [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+            if (@available(iOS 13.0, *)) [button setImage:[UIImage systemImageNamed:symbol] forState:UIControlStateNormal];
+            button.tintColor = UIColor.whiteColor;
+            button.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+            return button;
+        };
+
+        self.spoofQuickToggleButton = quickButton(@"تشغيل تزييف الموقع", @"location.fill", 72);
+        [self.spoofQuickToggleButton addTarget:self action:@selector(toggleSpoofFromQuickPanel:) forControlEvents:UIControlEventTouchUpInside];
+        [self.spoofQuickPanel addSubview:self.spoofQuickToggleButton];
+
+        UIButton *mapButton = quickButton(@"فتح الخريطة والإحداثيات", @"map.fill", 124);
+        mapButton.backgroundColor = [WolFoxProTheme accent];
+        [mapButton addTarget:self action:@selector(openMapFromQuickPanel:) forControlEvents:UIControlEventTouchUpInside];
+        [self.spoofQuickPanel addSubview:mapButton];
+
+        self.spoofQuickFavoriteButton = quickButton(@"تشغيل آخر موقع محفوظ", @"star.fill", 176);
+        self.spoofQuickFavoriteButton.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.78];
+        [self.spoofQuickFavoriteButton addTarget:self action:@selector(activateFavoriteFromQuickPanel:) forControlEvents:UIControlEventTouchUpInside];
+        [self.spoofQuickPanel addSubview:self.spoofQuickFavoriteButton];
+
+        [self.overlayWindow addSubview:self.spoofQuickPanel];
+    }
+
+    CGFloat panelWidth = CGRectGetWidth(self.spoofQuickPanel.bounds);
+    CGFloat x = MIN(MAX(14.0, CGRectGetMidX(self.floatingIcon.frame) - panelWidth * 0.5),
+                    CGRectGetWidth(self.overlayWindow.bounds) - panelWidth - 14.0);
+    CGFloat below = CGRectGetMaxY(self.floatingIcon.frame) + 10.0;
+    CGFloat maxY = CGRectGetHeight(self.overlayWindow.bounds) - CGRectGetHeight(self.spoofQuickPanel.bounds) - self.overlayWindow.safeAreaInsets.bottom - 12.0;
+    CGFloat y = MIN(below, maxY);
+    if (y < self.overlayWindow.safeAreaInsets.top + 10.0) y = self.overlayWindow.safeAreaInsets.top + 10.0;
+    self.spoofQuickPanel.frame = CGRectMake(x, y, panelWidth, CGRectGetHeight(self.spoofQuickPanel.bounds));
+    self.spoofQuickPanel.hidden = NO;
+    self.spoofQuickPanel.alpha = 0.0;
+    [self refreshSpoofQuickPanel];
+    [self.overlayWindow bringSubviewToFront:self.spoofQuickPanel];
+    [self.overlayWindow bringSubviewToFront:self.floatingIcon];
+    [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.spoofQuickPanel.alpha = 1.0; }];
+}
+
+- (void)closeSpoofQuickPanel:(UIButton *)sender {
+    (void)sender;
+    if (!self.spoofQuickPanel || self.spoofQuickPanel.hidden) return;
+    [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{
+        self.spoofQuickPanel.alpha = 0.0;
+    } completion:^(__unused BOOL finished) {
+        self.spoofQuickPanel.hidden = YES;
+    }];
+}
+
+- (void)refreshSpoofQuickPanel {
+    if (!self.spoofQuickPanel) return;
+    WolFoxProStore *store = [WolFoxProStore shared];
+    BOOL active = store.spoofActive && [WFLicenseClient isRuntimeLicenseValid];
+    UIColor *stateColor = active ? [WolFoxProTheme success] : [WolFoxProTheme danger];
+    self.spoofQuickStatusLabel.text = active ? @"الحالة: التزييف مفعّل" : @"الحالة: التزييف متوقف";
+    self.spoofQuickStatusLabel.textColor = stateColor;
+    [self.spoofQuickToggleButton setTitle:(active ? @"إيقاف التزييف والعودة للموقع الحقيقي" : @"تشغيل تزييف الموقع") forState:UIControlStateNormal];
+    self.spoofQuickToggleButton.backgroundColor = stateColor;
+    WolFoxProLocation *favorite = store.locations.firstObject;
+    self.spoofQuickFavoriteButton.enabled = favorite != nil;
+    self.spoofQuickFavoriteButton.alpha = favorite ? 1.0 : 0.45;
+    [self.spoofQuickFavoriteButton setTitle:(favorite ? [NSString stringWithFormat:@"تشغيل: %@", favorite.name ?: @"آخر موقع محفوظ"] : @"لا توجد مواقع محفوظة") forState:UIControlStateNormal];
+}
+
+- (void)toggleSpoofFromQuickPanel:(UIButton *)sender {
+    (void)sender;
+    WolFoxProStore *store = [WolFoxProStore shared];
+    if (store.spoofActive) {
+        [[WolFoxProHookManager shared] stopRoute];
+        store.scheduleApplied = NO;
+        store.spoofActive = NO;
+        [store saveSettings];
+    } else {
+        if (![WFLicenseClient isRuntimeLicenseValid]) {
+            [self showActivationScreenWithResult:[WFLicenseClient lastLicenseResult]];
+            return;
+        }
+        if (!CLLocationCoordinate2DIsValid(store.currentFakeCoords)) return;
+        store.spoofActive = YES;
+        [store saveSettings];
+        [[WolFoxProHookManager shared] deliverFakeUpdate];
+    }
+    [self refreshFloatingStatusIcon];
+    [self refreshSpoofQuickPanel];
+    [self.mainVC refreshSpoofHeaderStatus];
+}
+
+- (void)openMapFromQuickPanel:(UIButton *)sender {
+    (void)sender;
+    [self closeSpoofQuickPanel:nil];
+    [self showUI];
+    [self.mainVC openGPSPage];
+}
+
+- (void)activateFavoriteFromQuickPanel:(UIButton *)sender {
+    (void)sender;
+    WolFoxProLocation *favorite = [WolFoxProStore shared].locations.firstObject;
+    if (!favorite) return;
+    WolFoxProStore *store = [WolFoxProStore shared];
+    if (store.routeActive) [[WolFoxProHookManager shared] stopRoute];
+    store.currentFakeCoords = favorite.coordinate;
+    store.spoofActive = YES;
+    [store saveSettings];
+    [[WolFoxProHookManager shared] deliverFakeUpdate];
+    [self refreshFloatingStatusIcon];
+    [self refreshSpoofQuickPanel];
+    [self.mainVC refreshSpoofHeaderStatus];
 }
 
 - (void)handleFloatingStatusPan:(UIPanGestureRecognizer *)gesture {
-    UIView *icon = gesture.view;
+    UIView *icon = gesture ? gesture.view : self.floatingIcon;
     if (!icon) return;
-    CGPoint translation = [gesture translationInView:self.overlayWindow];
+    if (gesture && gesture.state == UIGestureRecognizerStateBegan) [self closeSpoofQuickPanel:nil];
+    CGPoint translation = gesture ? [gesture translationInView:self.overlayWindow] : CGPointZero;
     icon.center = CGPointMake(icon.center.x + translation.x, icon.center.y + translation.y);
-    [gesture setTranslation:CGPointZero inView:self.overlayWindow];
+    if (gesture) [gesture setTranslation:CGPointZero inView:self.overlayWindow];
 
     CGRect bounds = self.overlayWindow.bounds;
     CGFloat radius = CGRectGetWidth(icon.bounds) * 0.5;
@@ -4119,7 +4430,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     CGFloat maxY = MAX(minY, CGRectGetHeight(bounds) - radius - self.overlayWindow.safeAreaInsets.bottom - 10.0);
     icon.center = CGPointMake(MIN(MAX(icon.center.x, minX), maxX), MIN(MAX(icon.center.y, minY), maxY));
 
-    if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled) {
+    if (!gesture || gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled) {
         [[NSUserDefaults standardUserDefaults] setDouble:icon.frame.origin.x forKey:@"WF_FLOATING_STATUS_X"];
         [[NSUserDefaults standardUserDefaults] setDouble:icon.frame.origin.y forKey:@"WF_FLOATING_STATUS_Y"];
     }
