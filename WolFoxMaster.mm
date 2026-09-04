@@ -75,6 +75,9 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)openVirtualCameraImagePicker:(nullable UIButton *)sender;
 - (void)cameraIconPressed;
 - (void)refreshFloatingControlPanel;
+- (void)refreshFloatingStatusIcon;
+- (void)handleFloatingStatusTap:(UIButton *)sender;
+- (void)handleFloatingStatusPan:(UIPanGestureRecognizer *)gesture;
 - (void)closeFloatingControlPanel:(nullable UIButton *)sender;
 - (void)prepareVirtualCameraLongPress;
 @end
@@ -123,6 +126,10 @@ static BOOL WFMasterProcessIsEligible(void) {
         if (ctrl && ctrl.floatingControlPanel && !ctrl.floatingControlPanel.hidden && ctrl.floatingControlPanel.alpha > 0.1) {
             CGPoint panelPoint = [self convertPoint:point toView:ctrl.floatingControlPanel];
             if ([ctrl.floatingControlPanel pointInside:panelPoint withEvent:event]) return [super hitTest:point withEvent:event];
+        }
+        if (ctrl && ctrl.floatingIcon && !ctrl.floatingIcon.hidden && ctrl.floatingIcon.alpha > 0.1) {
+            CGPoint p = [self convertPoint:point toView:ctrl.floatingIcon];
+            if ([ctrl.floatingIcon pointInside:p withEvent:event]) return ctrl.floatingIcon;
         }
         if (ctrl && ctrl.cameraIcon && !ctrl.cameraIcon.hidden && ctrl.cameraIcon.alpha > 0.1) {
             CGPoint p = [self convertPoint:point toView:ctrl.cameraIcon];
@@ -3538,6 +3545,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(scheduleLocationMissing:) name:@"WF_SCHEDULE_LOCATION_MISSING" object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(virtualCameraStateChangedForController:) name:WFVirtualCameraStateDidChangeNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(virtualCameraImageSelectedForController:) name:WFVirtualCameraImageDidSelectNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(spoofStateChangedForController:) name:WFSpoofStateDidChangeNotification object:nil];
         [[WFSpoofScheduleManager shared] start];
     } 
     return self; 
@@ -3553,6 +3561,13 @@ static BOOL WFMasterProcessIsEligible(void) {
     }
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [WFLicenseClient stopHeartbeat]; // _WFHeartbeatTimer محدد في WFLicenseClient.m فقط
+}
+
+- (void)spoofStateChangedForController:(__unused NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self refreshFloatingStatusIcon];
+        [self.mainVC refreshSpoofHeaderStatus];
+    });
 }
 
 - (void)scheduleStateChanged:(__unused NSNotification *)notification {
@@ -3854,9 +3869,32 @@ static BOOL WFMasterProcessIsEligible(void) {
     self.mainVC = [WolFoxMainViewController new];
     self.overlayWindow.rootViewController = self.mainVC;
     
-    // Hide Floating Icon as requested, but keep it in memory for toggleUI logic
+    // Persistent floating status shortcut. Its color is driven by the actual spoof state.
     self.floatingIcon = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.floatingIcon.hidden = YES; 
+    CGFloat iconSize = 56.0;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    CGFloat defaultX = self.overlayWindow.bounds.size.width - iconSize - 18.0;
+    CGFloat defaultY = MAX(96.0, self.overlayWindow.safeAreaInsets.top + 72.0);
+    CGFloat savedX = [defaults objectForKey:@"WF_FLOATING_STATUS_X"] ? [defaults doubleForKey:@"WF_FLOATING_STATUS_X"] : defaultX;
+    CGFloat savedY = [defaults objectForKey:@"WF_FLOATING_STATUS_Y"] ? [defaults doubleForKey:@"WF_FLOATING_STATUS_Y"] : defaultY;
+    self.floatingIcon.frame = CGRectMake(savedX, savedY, iconSize, iconSize);
+    self.floatingIcon.layer.cornerRadius = iconSize * 0.5;
+    self.floatingIcon.layer.borderWidth = 2.0;
+    self.floatingIcon.layer.shadowColor = UIColor.blackColor.CGColor;
+    self.floatingIcon.layer.shadowOpacity = 0.35;
+    self.floatingIcon.layer.shadowOffset = CGSizeMake(0, 4);
+    self.floatingIcon.layer.shadowRadius = 8.0;
+    if (@available(iOS 13.0, *)) {
+        [self.floatingIcon setImage:[UIImage systemImageNamed:@"location.fill"
+                                            withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:19 weight:UIImageSymbolWeightBold]]
+                           forState:UIControlStateNormal];
+    }
+    self.floatingIcon.tintColor = UIColor.whiteColor;
+    self.floatingIcon.accessibilityHint = @"اضغط لفتح لوحة WolFox أو اسحب لتحريك العلامة";
+    [self.floatingIcon addTarget:self action:@selector(handleFloatingStatusTap:) forControlEvents:UIControlEventTouchUpInside];
+    [self.floatingIcon addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleFloatingStatusPan:)]];
+    [self.overlayWindow addSubview:self.floatingIcon];
+    [self refreshFloatingStatusIcon];
     
     self.mainVC.view.hidden = YES;
 #ifdef DEBUG
@@ -3981,12 +4019,47 @@ static BOOL WFMasterProcessIsEligible(void) {
         self.mainVC.view.alpha = 0;
     } completion:^(BOOL f){
         self.mainVC.view.hidden = YES;
-        self.overlayWindow.hidden = YES;
+        self.overlayWindow.hidden = NO;
+        [self refreshFloatingStatusIcon];
         [self restoreHostKeyWindow];
 #ifdef DEBUG
         WFLog(@"[WolFox][UI] dismiss_confirmed_volume_hook_stays_active");
 #endif
     }]; 
+}
+
+- (void)refreshFloatingStatusIcon {
+    if (!self.floatingIcon) return;
+    BOOL active = [WolFoxProStore shared].spoofActive && [WFLicenseClient isRuntimeLicenseValid];
+    UIColor *color = active ? [WolFoxProTheme success] : [WolFoxProTheme danger];
+    self.floatingIcon.backgroundColor = color;
+    self.floatingIcon.layer.borderColor = [UIColor.whiteColor colorWithAlphaComponent:0.75].CGColor;
+    self.floatingIcon.accessibilityLabel = active ? @"WolFox: تزييف الموقع مفعّل" : @"WolFox: تزييف الموقع متوقف";
+}
+
+- (void)handleFloatingStatusTap:(UIButton *)sender {
+    (void)sender;
+    [self toggleUI];
+}
+
+- (void)handleFloatingStatusPan:(UIPanGestureRecognizer *)gesture {
+    UIView *icon = gesture.view;
+    if (!icon) return;
+    CGPoint translation = [gesture translationInView:self.overlayWindow];
+    icon.center = CGPointMake(icon.center.x + translation.x, icon.center.y + translation.y);
+    [gesture setTranslation:CGPointZero inView:self.overlayWindow];
+
+    CGRect bounds = self.overlayWindow.bounds;
+    CGFloat radius = CGRectGetWidth(icon.bounds) * 0.5;
+    CGFloat minX = radius + 10.0, maxX = MAX(minX, CGRectGetWidth(bounds) - radius - 10.0);
+    CGFloat minY = radius + self.overlayWindow.safeAreaInsets.top + 10.0;
+    CGFloat maxY = MAX(minY, CGRectGetHeight(bounds) - radius - self.overlayWindow.safeAreaInsets.bottom - 10.0);
+    icon.center = CGPointMake(MIN(MAX(icon.center.x, minX), maxX), MIN(MAX(icon.center.y, minY), maxY));
+
+    if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled) {
+        [[NSUserDefaults standardUserDefaults] setDouble:icon.frame.origin.x forKey:@"WF_FLOATING_STATUS_X"];
+        [[NSUserDefaults standardUserDefaults] setDouble:icon.frame.origin.y forKey:@"WF_FLOATING_STATUS_Y"];
+    }
 }
 
 - (void)toggleCameraIcon:(BOOL)show {
