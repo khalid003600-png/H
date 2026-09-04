@@ -4,6 +4,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
+
 @interface WolFoxProLocation : NSObject <NSCopying>
 @property (nonatomic, assign) long long ID;
 @property (nonatomic, copy) NSString *name;
@@ -51,13 +53,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSInteger themeIndex;
 @property (nonatomic, assign) NSInteger mapStyle; // 0: Standard, 1: Satellite, 2: Hybrid
 @property (nonatomic, assign) double simSpeed;
-/// الفاصل الزمني لتحديث المسار الوهمي بالثواني.
+/// Ø§ÙÙØ§ØµÙ Ø§ÙØ²ÙÙÙ ÙØªØ­Ø¯ÙØ« Ø§ÙÙØ³Ø§Ø± Ø§ÙÙÙÙÙ Ø¨Ø§ÙØ«ÙØ§ÙÙ.
 @property (nonatomic, assign) NSTimeInterval updateIntervalSeconds;
 @property (nonatomic, assign) BOOL routeActive;
 @property (nonatomic, assign) CLLocationCoordinate2D targetRouteCoords;
 @property (nonatomic, copy, nullable) NSString *spoofedImagePath;
 @property (nonatomic, assign) BOOL mediaUploadActive;
-/// عند تفعيله تُحفظ آخر صورة للكamera الافتراضية بين مرات تشغيل التطبيق.
+/// Ø¹ÙØ¯ ØªÙØ¹ÙÙÙ ØªÙØ­ÙØ¸ Ø¢Ø®Ø± ØµÙØ±Ø© ÙÙÙamera Ø§ÙØ§ÙØªØ±Ø§Ø¶ÙØ© Ø¨ÙÙ ÙØ±Ø§Øª ØªØ´ØºÙÙ Ø§ÙØªØ·Ø¨ÙÙ.
 @property (nonatomic, assign) BOOL rememberCameraImage;
 
 // Local weekly location schedule. It evaluates only while the authorized app process is running.
