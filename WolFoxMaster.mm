@@ -127,6 +127,8 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)floatingIconSizeChanged:(UISegmentedControl *)control;
 - (void)floatingIconOpacityChanged:(UISlider *)slider;
 - (void)resetFloatingIconPosition;
+- (void)applyAccessibilityMetadataToView:(UIView *)view;
+- (void)contentSizeCategoryChanged:(NSNotification *)notification;
 - (void)showLocationHistory;
 - (void)historySelected:(UIButton *)button;
 - (void)clearLocationHistoryPressed;
@@ -235,12 +237,17 @@ static BOOL WFMasterProcessIsEligible(void) {
     // ADDED: تحديث واجهة البلوتوث عند حذف الملف النشط
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(btProfileDeactivated) name:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(virtualCameraStateChanged:) name:WFVirtualCameraStateDidChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(contentSizeCategoryChanged:)
+                                                 name:UIContentSizeCategoryDidChangeNotification
+                                               object:nil];
 }
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_ROUTE_FINISHED" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_ROUTE_STEP_UPDATED" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:WFVirtualCameraStateDidChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIContentSizeCategoryDidChangeNotification object:nil];
     [_activeMapSearch cancel];
     [_realLocManager stopUpdatingLocation];
     _realLocManager.delegate = nil;
@@ -271,7 +278,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)finishOnboarding {
     [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"WF_ONBOARDING_COMPLETED"];
     [[NSUserDefaults standardUserDefaults] synchronize];
-    [UIView animateWithDuration:0.18 animations:^{ self->_onboardingOverlay.alpha = 0.0; } completion:^(__unused BOOL finished) {
+    [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self->_onboardingOverlay.alpha = 0.0; } completion:^(__unused BOOL finished) {
         [self->_onboardingOverlay removeFromSuperview];
         self->_onboardingOverlay = nil;
     }];
@@ -435,6 +442,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     
     _scrollDashboard = [[UIScrollView alloc] initWithFrame:_dashboard.bounds];
     _scrollDashboard.alwaysBounceVertical = YES;
+    _scrollDashboard.showsVerticalScrollIndicator = YES;
+    _scrollDashboard.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    _scrollDashboard.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
     _scrollDashboard.backgroundColor = [WolFoxProTheme windowBackground];
     [_dashboard addSubview:_scrollDashboard];
 }
@@ -588,6 +598,30 @@ static BOOL WFMasterProcessIsEligible(void) {
     else if (page == 2) [self setupBluetoothPage];
     else if (page == 3) [self setupCameraPage];
     else if (page == 4) [self setupSettingsPage];
+    [self applyAccessibilityMetadataToView:_scrollDashboard];
+}
+
+- (void)applyAccessibilityMetadataToView:(UIView *)view {
+    if (!view) return;
+    if ([view isKindOfClass:[UILabel class]]) {
+        ((UILabel *)view).adjustsFontForContentSizeCategory = YES;
+    } else if ([view isKindOfClass:[UITextField class]]) {
+        ((UITextField *)view).adjustsFontForContentSizeCategory = YES;
+    } else if ([view isKindOfClass:[UITextView class]]) {
+        ((UITextView *)view).adjustsFontForContentSizeCategory = YES;
+    } else if ([view isKindOfClass:[UIButton class]]) {
+        ((UIButton *)view).titleLabel.adjustsFontForContentSizeCategory = YES;
+    }
+    for (UIView *subview in view.subviews) {
+        [self applyAccessibilityMetadataToView:subview];
+    }
+}
+
+- (void)contentSizeCategoryChanged:(NSNotification *)notification {
+    (void)notification;
+    if (!self.isViewLoaded || !_scrollDashboard) return;
+    [self switchPage:_activePage];
+    UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, _scrollDashboard);
 }
 
 #pragma mark - Bluetooth Page
@@ -2243,7 +2277,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     double dLat = target.latitude  - current.latitude;
     double dLon = target.longitude - current.longitude;
     CGFloat bearing = (CGFloat)atan2(dLon, dLat); // 0 = شمال، +π/2 = شرق
-    [UIView animateWithDuration:0.25 animations:^{
+    [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{
         view.transform = CGAffineTransformMakeRotation(bearing);
         view.layer.borderWidth = 3.0;
         view.layer.borderColor = [WolFoxProTheme accent].CGColor;
@@ -2855,7 +2889,8 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)setupSettingsPage {
     CGFloat w = _scrollDashboard.bounds.size.width;
     CGFloat cy = 10;
-    CGFloat cardW = w - 30;
+    CGFloat horizontalMargin = w < 340.0 ? 10.0 : 15.0;
+    CGFloat cardW = MAX(220.0, w - (horizontalMargin * 2.0));
 
     // ── عنوان قسم ────────────────────────────────────────────
     void (^secLabel)(NSString *, CGFloat) = ^(NSString *text, CGFloat y) {
@@ -2870,7 +2905,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 
     // ── بطاقة قسم ────────────────────────────────────────────
     UIView * __block (^newCard)(CGFloat, CGFloat) = ^UIView *(CGFloat y, CGFloat h) {
-        UIView *c = [[UIView alloc] initWithFrame:CGRectMake(15, y, cardW, h)];
+        UIView *c = [[UIView alloc] initWithFrame:CGRectMake(horizontalMargin, y, cardW, h)];
         c.backgroundColor = [WolFoxProTheme surfacePrimary];
         c.layer.cornerRadius = 18;
         c.layer.borderWidth  = 1.0;
@@ -3031,6 +3066,42 @@ static BOOL WFMasterProcessIsEligible(void) {
     objc_setAssociatedObject(self, "_theme_btn", themeBtn, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [themeCard addSubview:themeBtn];
     cy += 66 + 18;
+
+    // ════════════════════════════════════════════════════════
+    // إمكانية الوصول
+    // ════════════════════════════════════════════════════════
+    secLabel(@"إمكانية الوصول", cy);
+    cy += 24;
+    UIView *accessibilityCard = newCard(cy, 140);
+    NSUserDefaults *accessibilityDefaults = NSUserDefaults.standardUserDefaults;
+    BOOL reduceMotionPreference = [accessibilityDefaults boolForKey:@"WF_REDUCE_MOTION"];
+    [accessibilityCard addSubview:[self royalSwitchInside:accessibilityCard
+        t:@"تقليل الحركة داخل WolFox"
+        i:@"figure.walk.motion"
+        isOn:(reduceMotionPreference || UIAccessibilityIsReduceMotionEnabled())
+        y:0
+        action:^(UISwitch *s){
+            [accessibilityDefaults setBool:s.on forKey:@"WF_REDUCE_MOTION"];
+            [accessibilityDefaults synchronize];
+            [self showToast:(UIAccessibilityIsReduceMotionEnabled() && !s.on)
+                ? @"تقليل الحركة ما زال مفعلاً من إعدادات النظام"
+                : (s.on ? @"تم تقليل الحركات والمؤثرات" : @"تم تشغيل الحركات الخفيفة")];
+            [self switchPage:4];
+    }]];
+    BOOL dynamicTypeEnabled = [accessibilityDefaults objectForKey:@"WF_DYNAMIC_TYPE_ENABLED"] == nil ||
+                              [accessibilityDefaults boolForKey:@"WF_DYNAMIC_TYPE_ENABLED"];
+    [accessibilityCard addSubview:[self royalSwitchInside:accessibilityCard
+        t:@"اتباع حجم خط النظام"
+        i:@"textformat.size"
+        isOn:dynamicTypeEnabled
+        y:70
+        action:^(UISwitch *s){
+            [accessibilityDefaults setBool:s.on forKey:@"WF_DYNAMIC_TYPE_ENABLED"];
+            [accessibilityDefaults synchronize];
+            [self showToast:s.on ? @"تم تفعيل النص الديناميكي" : @"تم تثبيت حجم نص WolFox"];
+            [self switchPage:4];
+    }]];
+    cy += 140 + 18;
 
     // ════════════════════════════════════════════════════════
     
@@ -3227,6 +3298,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     [logoutCard addSubview:logoutBtn];
     cy += 66 + 20;
 
+    CGFloat safeBottom = MAX(self.view.safeAreaInsets.bottom, 16.0);
+    _scrollDashboard.contentInset = UIEdgeInsetsMake(0, 0, safeBottom, 0);
+    _scrollDashboard.scrollIndicatorInsets = _scrollDashboard.contentInset;
     _scrollDashboard.contentSize = CGSizeMake(w, cy);
 }
 
@@ -5332,7 +5406,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         self.cameraDragStartTime = CACurrentMediaTime();
         self.cameraIconDidDrag = NO;
         [self.cameraIcon.layer removeAnimationForKey:@"wf_photo_pulse"];
-        [UIView animateWithDuration:0.12 animations:^{
+        [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{
             self.cameraIcon.transform = CGAffineTransformMakeScale(1.15, 1.15);
         }];
     }
@@ -5348,7 +5422,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [gesture setTranslation:CGPointZero inView:self.overlayWindow];
     if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled) {
         CFTimeInterval duration = CACurrentMediaTime() - self.cameraDragStartTime;
-        [UIView animateWithDuration:0.20 animations:^{ self.cameraIcon.transform = CGAffineTransformIdentity; }];
+        [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.cameraIcon.transform = CGAffineTransformIdentity; }];
         if (gesture.state == UIGestureRecognizerStateEnded && self.cameraIconDidDrag && duration > 2.0) {
             WFVirtualCameraManager *manager = [WFVirtualCameraManager shared];
             BOOL changed = NO;
@@ -5502,7 +5576,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 
     panel.alpha = 0.0;
     panel.transform = CGAffineTransformMakeScale(0.88, 0.88);
-    [UIView animateWithDuration:0.24 animations:^{
+    [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{
         panel.alpha = 1.0;
         panel.transform = CGAffineTransformIdentity;
     }];
