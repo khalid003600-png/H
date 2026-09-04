@@ -12,6 +12,8 @@
 @property (nonatomic, strong) UILabel *uuidLabel;
 @property (nonatomic, strong) UIButton *activateButton;
 @property (nonatomic, strong) UIButton *updateButton;
+@property (nonatomic, strong) UIButton *showToolButton;
+@property (nonatomic, strong) UIButton *skipButton;
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *loadingOverlay;
 @property (nonatomic, strong) UILabel *timerLabel;
@@ -199,6 +201,28 @@
     self.updateButton.hidden = !self.updateURL.length;
     [card addSubview:self.updateButton];
 
+    self.showToolButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.showToolButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.showToolButton.backgroundColor = [WolFoxProTheme royalBlue];
+    self.showToolButton.layer.cornerRadius = 12.0;
+    [self.showToolButton setTitle:@"عرض الأداة" forState:UIControlStateNormal];
+    [self.showToolButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.showToolButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
+    [self.showToolButton addTarget:self action:@selector(showToolPressed) forControlEvents:UIControlEventTouchUpInside];
+    self.showToolButton.hidden = YES;
+    [card addSubview:self.showToolButton];
+
+    self.skipButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.skipButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.skipButton.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.16];
+    self.skipButton.layer.cornerRadius = 12.0;
+    [self.skipButton setTitle:@"تخطي الآن" forState:UIControlStateNormal];
+    [self.skipButton setTitleColor:[WolFoxProTheme textPrimary] forState:UIControlStateNormal];
+    self.skipButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    [self.skipButton addTarget:self action:@selector(skipPressed) forControlEvents:UIControlEventTouchUpInside];
+    self.skipButton.hidden = YES;
+    [card addSubview:self.skipButton];
+
     self.uuidLabel = [UILabel new];
     self.uuidLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.uuidLabel.textColor = [UIColor colorWithWhite:0.48 alpha:1.0];
@@ -277,7 +301,17 @@
         [self.updateButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
         [self.updateButton.heightAnchor constraintEqualToConstant:self.updateURL.length ? 44 : 0],
 
-        [self.uuidLabel.topAnchor constraintEqualToAnchor:self.updateButton.bottomAnchor constant:12],
+        [self.showToolButton.topAnchor constraintEqualToAnchor:self.updateButton.bottomAnchor constant:10],
+        [self.showToolButton.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
+        [self.showToolButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
+        [self.showToolButton.heightAnchor constraintEqualToConstant:44],
+
+        [self.skipButton.topAnchor constraintEqualToAnchor:self.showToolButton.bottomAnchor constant:8],
+        [self.skipButton.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
+        [self.skipButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
+        [self.skipButton.heightAnchor constraintEqualToConstant:40],
+
+        [self.uuidLabel.topAnchor constraintEqualToAnchor:self.skipButton.bottomAnchor constant:12],
         [self.uuidLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
         [self.uuidLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
         [self.uuidLabel.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-30],
@@ -400,6 +434,8 @@
             self.statusLabel.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.16 alpha:0.72];
             self.statusLabel.text = [self successActivationMessage:result];
             self.statusLabel.hidden = NO;
+            self.showToolButton.hidden = NO;
+            self.skipButton.hidden = NO;
             self.activateButton.enabled = NO;
             [self.activateButton setTitle:@"تم التفعيل بنجاح" forState:UIControlStateNormal];
             [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.loadingOverlay.alpha = 0; } completion:^(BOOL finished) {
@@ -409,12 +445,8 @@
             [feedback prepare];
             [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
             
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [self dismissViewControllerAnimated:YES completion:^{
-                    WFLog(@"[WolFox][ACT] activation_view_dismissed");
-                    if (self.completion) self.completion(YES);
-                }];
-            });
+            // يبقى ملخص التفعيل ظاهراً حتى يختار العميل عرض الأداة أو التخطي.
+            [self showToastMessage:@"تم تفعيل الكود بنجاح. راجع مدة الاشتراك ثم اختر الإجراء."];
         } else {
             WFLog(@"[WolFox][ACT] server_activation_failed status=%ld", (long)result.status);
             [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.loadingOverlay.alpha = 0; } completion:^(BOOL f){
@@ -438,17 +470,17 @@
 - (NSString *)friendlyActivationMessage:(WFLicenseResult *)result {
     switch (result.status) {
         case WFLicenseStatusInvalid:
-            return @"هذا الكود غير صحيح";
+            return @"الكود غير صحيح أو غير مسجل. راجع الأحرف وحاول مرة أخرى.";
         case WFLicenseStatusDeviceRecovery:
-            return @"هذا الكود المستخدم على جهاز آخر";
+            return @"هذا الكود مرتبط بجهاز آخر. استخدم كوداً مخصصاً لهذا الجهاز.";
         case WFLicenseStatusNetworkError:
-            return @"تعذر الوصول إلى الخادم الآن؛ تحقق من الإنترنت وسيُعاد الاتصال تلقائياً";
+            return @"تعذر الاتصال بخادم التفعيل. تحقق من الإنترنت ثم حاول مرة أخرى.";
         case WFLicenseStatusProjectDisabled:
-            return @"تعذر مطابقة إعدادات المشروع مع لوحة الإدارة";
+            return @"تعذر التحقق من إعدادات المشروع. تواصل مع الدعم.";
         case WFLicenseStatusExpired:
-            return @"هذا الكود منتهي الصلاحية";
+            return @"انتهت صلاحية هذا الكود. اطلب كوداً جديداً.";
         case WFLicenseStatusBlocked:
-            return @"هذا الكود موقوف من لوحة التحكم";
+            return @"تم إيقاف هذا الكود من لوحة الإدارة. تواصل مع الدعم.";
         case WFLicenseStatusInvalidToken:
             return @"انتهت جلسة التفعيل؛ أعد المحاولة بالكود نفسه";
         case WFLicenseStatusUpdateRequired:
@@ -495,6 +527,26 @@
         self.statusLabel.alpha = 1.0;
         self.exitButton.alpha = 1.0;
     }];
+}
+
+- (void)showToolPressed {
+    [self.view endEditing:YES];
+    [self dismissViewControllerAnimated:YES completion:^{
+        WFLog(@"[WolFox][ACT] activation_view_dismissed_show_tool");
+        if (self.completion) self.completion(YES);
+    }];
+}
+
+- (void)skipPressed {
+    [self.view endEditing:YES];
+    [self dismissViewControllerAnimated:YES completion:^{
+        WFLog(@"[WolFox][ACT] activation_view_dismissed_skip");
+    }];
+}
+
+- (void)showToastMessage:(NSString *)message {
+    // رسالة نجاح صغيرة داخل بطاقة التفعيل، بدون الاعتماد على نافذة خارجية.
+    self.statusLabel.accessibilityValue = message;
 }
 
 - (void)openUpdateURL {

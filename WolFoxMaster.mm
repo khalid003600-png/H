@@ -322,7 +322,8 @@ static BOOL WFMasterProcessIsEligible(void) {
     next.frame = CGRectMake(width - 138, 140, 120, 38);
     next.backgroundColor = [WolFoxProTheme accent];
     next.layer.cornerRadius = 11.0;
-    [next setTitle:(step == (NSInteger)titles.count - 1 ? @"تم" : @"التالي") forState:UIControlStateNormal];
+    [next setTitle:(step == (NSInteger)titles.count - 1 ? @"تم" : @"التالي  ←") forState:UIControlStateNormal];
+    next.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
     [next setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     next.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBlack];
     next.tag = (step == (NSInteger)titles.count - 1) ? -1 : 1;
@@ -776,6 +777,8 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)startBTScan {
     if (_discoveredDevices == nil) _discoveredDevices = [NSMutableArray new];
     [_discoveredDevices removeAllObjects];
+    // أوقف أي مسح سابق قبل بدء دورة جديدة حتى لا تختلط النتائج القديمة بالجديدة.
+    if (_btManager) [_btManager stopScan];
 
     UIButton *scanBtn = objc_getAssociatedObject(self, "bt_scan_btn");
     [scanBtn setTitle:@"  جاري البحث..." forState:UIControlStateNormal];
@@ -2131,7 +2134,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 
 - (BOOL)parseCoordinateSearchText:(NSString *)text coordinate:(CLLocationCoordinate2D *)coordinate {
     NSString *normalized = [self normalizedMapSearchText:text];
-    NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",; \t\r\n"];
+    NSCharacterSet *separators = [NSCharacterSet characterSetWithCharactersInString:@",;/|\t\r\n"];
     NSArray<NSString *> *rawParts = [normalized componentsSeparatedByCharactersInSet:separators];
     NSMutableArray<NSString *> *parts = [NSMutableArray new];
     for (NSString *part in rawParts) {
@@ -2197,7 +2200,22 @@ static BOOL WFMasterProcessIsEligible(void) {
             MKMapItem *item = response.mapItems.firstObject;
             CLLocation *location = item.placemark.location;
             if (!location || error) {
-                [self showToast:@"لم يتم العثور على العنوان أو المكان ❌"];
+                // احتياط للبحث العربي أو العناوين التي لا يعيدها MKLocalSearch مباشرة.
+                CLGeocoder *geocoder = [CLGeocoder new];
+                [geocoder geocodeAddressString:query completionHandler:^(NSArray<CLPlacemark *> *placemarks, NSError *geocodeError) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (self->_activeMapSearch != nil && self->_activeMapSearch != search) return;
+                        CLPlacemark *placemark = placemarks.firstObject;
+                        CLLocation *fallbackLocation = placemark.location;
+                        if (!fallbackLocation || geocodeError) {
+                            [self showToast:@"لم يتم العثور على العنوان أو المكان ❌"];
+                            return;
+                        }
+                        NSString *fallbackTitle = placemark.name.length ? placemark.name : query;
+                        searchBar.text = fallbackTitle;
+                        [self selectMapSearchCoordinate:fallbackLocation.coordinate title:fallbackTitle toast:@"تم العثور على المكان وتحديده ✅"];
+                    });
+                }];
                 return;
             }
             NSString *title = item.name.length ? item.name : query;
@@ -2600,7 +2618,12 @@ static BOOL WFMasterProcessIsEligible(void) {
 
 - (void)saveIDProPage {
     UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
-    if ([[WolFoxProStore shared] activateIdentifierString:tf.text ?: @""]) {
+    NSString *raw = [tf.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+    raw = [raw stringByReplacingOccurrencesOfString:@"urn:uuid:" withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, raw.length)];
+    raw = [raw stringByReplacingOccurrencesOfString:@"{" withString:@""];
+    raw = [raw stringByReplacingOccurrencesOfString:@"}" withString:@""];
+    NSUUID *normalizedUUID = [[NSUUID alloc] initWithUUIDString:raw];
+    if (normalizedUUID && [[WolFoxProStore shared] activateIdentifierString:normalizedUUID.UUIDString]) {
         tf.text = [WolFoxProStore shared].activeIdentifierUUID;
         [self refreshSpoofHeaderStatus];
         UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
@@ -2781,8 +2804,20 @@ static BOOL WFMasterProcessIsEligible(void) {
     }]];
     cy += 210 + 18;
 
+// 4. التنبيهات
     // ════════════════════════════════════════════════════════
-    // تخصيص العلامة العائمة
+    secLabel(@"التنبيهات", cy);
+    cy += 24;
+    UIView *notifCard = newCard(cy, 70);
+    BOOL expiryOn = [[NSUserDefaults standardUserDefaults] boolForKey:@"WF_EXPIRY_NOTIFICATIONS_ENABLED"];
+    [notifCard addSubview:[self royalSwitchInside:notifCard
+        t:@"تذكير قبل 3 أيام من انتهاء الاشتراك"
+        i:@"bell.badge.fill"
+        isOn:expiryOn
+        y:0
+        action:^(UISwitch *s){ [self expiryNotificationsChanged:s]; }]];
+    cy += 70 + 18;
+
     // ════════════════════════════════════════════════════════
     secLabel(@"تخصيص العلامة العائمة", cy);
     cy += 24;
@@ -2839,22 +2874,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [floatingCard addSubview:resetFloating];
     cy += 238 + 18;
 
-// 4. التنبيهات
-    // ════════════════════════════════════════════════════════
-    secLabel(@"التنبيهات", cy);
-    cy += 24;
-    UIView *notifCard = newCard(cy, 70);
-    BOOL expiryOn = [[NSUserDefaults standardUserDefaults] boolForKey:@"WF_EXPIRY_NOTIFICATIONS_ENABLED"];
-    [notifCard addSubview:[self royalSwitchInside:notifCard
-        t:@"تذكير قبل 3 أيام من انتهاء الاشتراك"
-        i:@"bell.badge.fill"
-        isOn:expiryOn
-        y:0
-        action:^(UISwitch *s){ [self expiryNotificationsChanged:s]; }]];
-    cy += 70 + 18;
 
-    // ════════════════════════════════════════════════════════
-    
 
 // 2. المظهر
     // ════════════════════════════════════════════════════════
@@ -4078,8 +4098,32 @@ static BOOL WFMasterProcessIsEligible(void) {
     tripleTap.cancelsTouchesInView = NO;
     [self.overlayWindow addGestureRecognizer:tripleTap];
 
+    // إظهار الاختصار العائم عند فتح التطبيق من دون إظهار لوحة التحكم كاملة.
+    // الإخفاء الصريح من المستخدم له الأولوية، أما الإعداد الافتراضي فهو الظهور.
+    dispatch_async(dispatch_get_main_queue(), ^{ [self showFloatingStatusIconAtLaunch]; });
+
     // لا نستخدم مؤقتاً متكرراً لإبقاء النافذة مرئية؛ مسارات العرض المخصصة
     // هي الوحيدة التي تغيّر حالة النافذة، لتفادي مورد واجهة دائم بلا إلغاء.
+}
+
+- (void)showFloatingStatusIconAtLaunch {
+    if (!self.overlayWindow || !self.floatingIcon) return;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    BOOL explicitlyVisible = ![defaults objectForKey:@"WF_FLOATING_STATUS_VISIBLE"] ||
+                             [defaults boolForKey:@"WF_FLOATING_STATUS_VISIBLE"];
+    BOOL hiddenByUser = [defaults boolForKey:WFUIHiddenOnLaunchKey];
+    if (!explicitlyVisible || hiddenByUser) {
+        self.floatingIcon.hidden = YES;
+        if (self.mainVC.view.hidden) self.overlayWindow.hidden = YES;
+        return;
+    }
+    self.mainVC.view.hidden = YES;
+    self.overlayWindow.hidden = NO;
+    self.floatingIcon.hidden = NO;
+    [self refreshFloatingStatusIcon];
+    [self.overlayWindow bringSubviewToFront:self.floatingIcon];
+    self.floatingIcon.alpha = 0.0;
+    [UIView animateWithDuration:0.20 animations:^{ self.floatingIcon.alpha = 0.92; }];
 }
 
 - (void)handleThreeSequentialTaps:(UITapGestureRecognizer *)gesture {
