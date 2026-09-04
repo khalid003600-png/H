@@ -4071,14 +4071,14 @@ static BOOL WFMasterProcessIsEligible(void) {
             apply.accessibilityLabel = [NSString stringWithFormat:@"تطبيق ملف %@", profile.name ?: @"الموقع"];
             [row addSubview:apply];
 
-            UIButton *delete = [UIButton buttonWithType:UIButtonTypeSystem];
-            delete.frame = CGRectMake(3, 12, 40, 44);
-            if (@available(iOS 13.0, *)) [delete setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
-            delete.tintColor = [WolFoxProTheme danger];
-            objc_setAssociatedObject(delete, "profile_id", profile.profileID, OBJC_ASSOCIATION_COPY_NONATOMIC);
-            [delete addTarget:self action:@selector(deleteLocationProfile:) forControlEvents:UIControlEventTouchUpInside];
-            delete.accessibilityLabel = [NSString stringWithFormat:@"حذف ملف %@", profile.name ?: @"الموقع"];
-            [row addSubview:delete];
+            UIButton *deleteButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            deleteButton.frame = CGRectMake(3, 12, 40, 44);
+            if (@available(iOS 13.0, *)) [deleteButton setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
+            deleteButton.tintColor = [WolFoxProTheme danger];
+            objc_setAssociatedObject(deleteButton, "profile_id", profile.profileID, OBJC_ASSOCIATION_COPY_NONATOMIC);
+            [deleteButton addTarget:self action:@selector(deleteLocationProfile:) forControlEvents:UIControlEventTouchUpInside];
+            deleteButton.accessibilityLabel = [NSString stringWithFormat:@"حذف ملف %@", profile.name ?: @"الموقع"];
+            [row addSubview:deleteButton];
             y += 76.0;
         }
         scroll.contentSize = CGSizeMake(300, y);
