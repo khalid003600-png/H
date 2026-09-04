@@ -4,6 +4,8 @@
 #import "WFHookDefaults.h"
 #import <sqlite3.h>
 
+NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidChangeNotification";
+
 @implementation WolFoxProLocation
 - (id)copyWithZone:(NSZone *)zone {
     WolFoxProLocation *copy = [[WolFoxProLocation allocWithZone:zone] init];
@@ -40,6 +42,14 @@
     static dispatch_once_t once;
     dispatch_once(&once, ^{ s = [WolFoxProStore new]; });
     return s;
+}
+
+- (void)setSpoofActive:(BOOL)spoofActive {
+    if (_spoofActive == spoofActive) return;
+    _spoofActive = spoofActive;
+    [[NSNotificationCenter defaultCenter] postNotificationName:WFSpoofStateDidChangeNotification
+                                                        object:self
+                                                      userInfo:@{ @"active": @(spoofActive) }];
 }
 
 - (instancetype)init {
@@ -84,7 +94,7 @@
             WolFoxProLocation *l = [WolFoxProLocation new];
             l.ID = sqlite3_column_int64(stmt, 0);
             const char *nameText = (const char *)sqlite3_column_text(stmt, 1);
-            l.name = nameText ? [NSString stringWithUTF8String:nameText] : @"موقع غير معروف";
+            l.name = nameText ? [NSString stringWithUTF8String:nameText] : @"ÙÙÙØ¹ ØºÙØ± ÙØ¹Ø±ÙÙ";
             l.coordinate = CLLocationCoordinate2DMake(sqlite3_column_double(stmt, 2), sqlite3_column_double(stmt, 3));
             l.altitude = sqlite3_column_double(stmt, 4);
             [_mutableLocations addObject:l];
@@ -136,7 +146,7 @@
     @synchronized(self) {
     NSUserDefaults *u = [NSUserDefaults standardUserDefaults];
     if ([u objectForKey:@"WF_PRO_SPOOF_ACT"] == nil) { self.spoofActive = NO; [u setBool:NO forKey:@"WF_PRO_SPOOF_ACT"]; } else { self.spoofActive = [u boolForKey:@"WF_PRO_SPOOF_ACT"]; }
-    // FIXED: routeActive لا يُحفظ بين الجلسات — الـ timer ينتهي مع العملية
+    // FIXED: routeActive ÙØ§ ÙÙØ­ÙØ¸ Ø¨ÙÙ Ø§ÙØ¬ÙØ³Ø§Øª â Ø§ÙÙ timer ÙÙØªÙÙ ÙØ¹ Ø§ÙØ¹ÙÙÙØ©
     self.routeActive = NO;
     if ([u objectForKey:@"WF_PRO_JITTER_ACT"] == nil) {
         self.jitterActive = WFDefaultJitterEnabled;
@@ -170,7 +180,7 @@
     self.spoofedImagePath = [u stringForKey:@"WF_PRO_CAM_IMG"];
     self.mediaUploadActive = [u boolForKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
     id rememberCameraValue = [u objectForKey:@"WF_PRO_CAM_REMEMBER"];
-    // ترحيل آمن للإصدارات السابقة: الصورة الموجودة كانت تُحفظ دائماً، فنحافظ عليها مرة واحدة.
+    // ØªØ±Ø­ÙÙ Ø¢ÙÙ ÙÙØ¥ØµØ¯Ø§Ø±Ø§Øª Ø§ÙØ³Ø§Ø¨ÙØ©: Ø§ÙØµÙØ±Ø© Ø§ÙÙÙØ¬ÙØ¯Ø© ÙØ§ÙØª ØªÙØ­ÙØ¸ Ø¯Ø§Ø¦ÙØ§ÙØ ÙÙØ­Ø§ÙØ¸ Ø¹ÙÙÙØ§ ÙØ±Ø© ÙØ§Ø­Ø¯Ø©.
     self.rememberCameraImage = rememberCameraValue ? [u boolForKey:@"WF_PRO_CAM_REMEMBER"]
                                                    : self.spoofedImagePath.length > 0;
     if (!rememberCameraValue) [u setBool:self.rememberCameraImage forKey:@"WF_PRO_CAM_REMEMBER"];
@@ -237,7 +247,7 @@
         if (![d isKindOfClass:[NSDictionary class]]) continue;
         WolFoxBleProfile *p = [WolFoxBleProfile new];
         p.profileID = d[@"profileID"] ?: [[NSUUID UUID] UUIDString];
-        p.name      = d[@"name"] ?: @"جهاز غير معروف";
+        p.name      = d[@"name"] ?: @"Ø¬ÙØ§Ø² ØºÙØ± ÙØ¹Ø±ÙÙ";
         p.uuid      = d[@"uuid"] ?: @"";
         p.localName = d[@"localName"] ?: @"";
         p.rssi      = [d[@"rssi"] integerValue];
@@ -348,7 +358,7 @@
     if (!alreadySaved) {
         WolFoxProIdentifier *identifier = [WolFoxProIdentifier new];
         identifier.uuid = self.activeIdentifierUUID;
-        identifier.name = @"هوية موحدة";
+        identifier.name = @"ÙÙÙØ© ÙÙØ­Ø¯Ø©";
         identifier.createdAt = [NSDate date];
         [_mutableIdentifiers addObject:identifier];
     }
@@ -402,7 +412,7 @@
             }
         }
     }
-    // FIXED: إذا حُذف الملف النشط، أوقف تزييف البلوتوث تلقائياً
+    // FIXED: Ø¥Ø°Ø§ Ø­ÙØ°Ù Ø§ÙÙÙÙ Ø§ÙÙØ´Ø·Ø Ø£ÙÙÙ ØªØ²ÙÙÙ Ø§ÙØ¨ÙÙØªÙØ« ØªÙÙØ§Ø¦ÙØ§Ù
     if (profileID.length && self.activeBleProfileID.length &&
         [self.activeBleProfileID isEqualToString:profileID]) {
         self.activeBleProfileID = nil;
@@ -433,7 +443,7 @@
         directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"WolFoxMedia"];
         [fm createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
     }
-    // استخدم bundleID لعزل ملفات الوسائط بين التطبيقات المختلفة
+    // Ø§Ø³ØªØ®Ø¯Ù bundleID ÙØ¹Ø²Ù ÙÙÙØ§Øª Ø§ÙÙØ³Ø§Ø¦Ø· Ø¨ÙÙ Ø§ÙØªØ·Ø¨ÙÙØ§Øª Ø§ÙÙØ®ØªÙÙØ©
     NSString *bundleSuffix = [NSBundle mainBundle].bundleIdentifier ?: @"default";
     NSString *safeBundle = [[bundleSuffix componentsSeparatedByCharactersInSet:
         [[NSCharacterSet alphanumericCharacterSet] invertedSet]] componentsJoinedByString:@"_"];
