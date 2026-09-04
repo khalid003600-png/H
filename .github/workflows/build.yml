@@ -29,6 +29,10 @@ jobs:
       WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install compatibility-check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
       - name: Run compatibility checks
         run: |
           chmod +x ./*.sh tools/*.sh
