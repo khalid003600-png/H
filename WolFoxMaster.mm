@@ -131,6 +131,10 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)historySelected:(UIButton *)button;
 - (void)clearLocationHistoryPressed;
 - (void)editFav:(UIButton *)button;
+- (void)exportLocationData;
+- (void)importLocationDataFromClipboard;
+- (void)showLocationDataResetOptions;
+- (void)copyDiagnosticReport;
 @end
 
 @implementation WolFoxOverlayWindow
@@ -2949,6 +2953,77 @@ static BOOL WFMasterProcessIsEligible(void) {
     cy += 130 + 18;
 
     // ════════════════════════════════════════════════════════
+    // إدارة بيانات المواقع
+    // ════════════════════════════════════════════════════════
+    secLabel(@"إدارة بيانات المواقع", cy);
+    cy += 24;
+    UIView *dataCard = newCard(cy, 192);
+
+    UIButton *exportDataButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    exportDataButton.frame = CGRectMake(12, 8, dataCard.bounds.size.width - 24, 50);
+    exportDataButton.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.14];
+    exportDataButton.layer.cornerRadius = 14;
+    [exportDataButton setTitle:@"  نسخ ومشاركة نسخة احتياطية JSON" forState:UIControlStateNormal];
+    [exportDataButton setTitleColor:[WolFoxProTheme accent] forState:UIControlStateNormal];
+    exportDataButton.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [exportDataButton setImage:[UIImage systemImageNamed:@"square.and.arrow.up.fill"] forState:UIControlStateNormal];
+    exportDataButton.tintColor = [WolFoxProTheme accent];
+    exportDataButton.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    [exportDataButton addTarget:self action:@selector(exportLocationData) forControlEvents:UIControlEventTouchUpInside];
+    exportDataButton.accessibilityLabel = @"نسخ ومشاركة نسخة احتياطية من المواقع";
+    [dataCard addSubview:exportDataButton];
+
+    UIButton *importDataButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    importDataButton.frame = CGRectMake(12, 69, dataCard.bounds.size.width - 24, 50);
+    importDataButton.backgroundColor = [[WolFoxProTheme success] colorWithAlphaComponent:0.12];
+    importDataButton.layer.cornerRadius = 14;
+    [importDataButton setTitle:@"  استيراد نسخة JSON من الحافظة" forState:UIControlStateNormal];
+    [importDataButton setTitleColor:[WolFoxProTheme success] forState:UIControlStateNormal];
+    importDataButton.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [importDataButton setImage:[UIImage systemImageNamed:@"doc.on.clipboard.fill"] forState:UIControlStateNormal];
+    importDataButton.tintColor = [WolFoxProTheme success];
+    importDataButton.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    [importDataButton addTarget:self action:@selector(importLocationDataFromClipboard) forControlEvents:UIControlEventTouchUpInside];
+    importDataButton.accessibilityLabel = @"استيراد مواقع من نص JSON في الحافظة";
+    [dataCard addSubview:importDataButton];
+
+    UIButton *resetDataButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    resetDataButton.frame = CGRectMake(12, 130, dataCard.bounds.size.width - 24, 50);
+    resetDataButton.backgroundColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.12];
+    resetDataButton.layer.cornerRadius = 14;
+    [resetDataButton setTitle:@"  مسح المفضلة أو سجل المواقع" forState:UIControlStateNormal];
+    [resetDataButton setTitleColor:[WolFoxProTheme danger] forState:UIControlStateNormal];
+    resetDataButton.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [resetDataButton setImage:[UIImage systemImageNamed:@"trash.fill"] forState:UIControlStateNormal];
+    resetDataButton.tintColor = [WolFoxProTheme danger];
+    resetDataButton.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    [resetDataButton addTarget:self action:@selector(showLocationDataResetOptions) forControlEvents:UIControlEventTouchUpInside];
+    resetDataButton.accessibilityLabel = @"فتح خيارات مسح بيانات المواقع";
+    [dataCard addSubview:resetDataButton];
+    cy += 192 + 18;
+
+    // ════════════════════════════════════════════════════════
+    // التشخيص
+    // ════════════════════════════════════════════════════════
+    secLabel(@"التشخيص", cy);
+    cy += 24;
+    UIView *diagnosticCard = newCard(cy, 66);
+    UIButton *diagnosticButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    diagnosticButton.frame = CGRectMake(12, 8, diagnosticCard.bounds.size.width - 24, 50);
+    diagnosticButton.backgroundColor = [[WolFoxProTheme gold] colorWithAlphaComponent:0.12];
+    diagnosticButton.layer.cornerRadius = 14;
+    [diagnosticButton setTitle:@"  نسخ تقرير تشخيص آمن" forState:UIControlStateNormal];
+    [diagnosticButton setTitleColor:[WolFoxProTheme gold] forState:UIControlStateNormal];
+    diagnosticButton.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [diagnosticButton setImage:[UIImage systemImageNamed:@"stethoscope"] forState:UIControlStateNormal];
+    diagnosticButton.tintColor = [WolFoxProTheme gold];
+    diagnosticButton.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    [diagnosticButton addTarget:self action:@selector(copyDiagnosticReport) forControlEvents:UIControlEventTouchUpInside];
+    diagnosticButton.accessibilityLabel = @"نسخ تقرير تشخيص لا يحتوي على أسرار";
+    [diagnosticCard addSubview:diagnosticButton];
+    cy += 66 + 18;
+
+    // ════════════════════════════════════════════════════════
     
 
 // 6. الدعم والحساب
@@ -3030,6 +3105,206 @@ static BOOL WFMasterProcessIsEligible(void) {
 
     _scrollDashboard.contentSize = CGSizeMake(w, cy);
 }
+
+- (NSDictionary *)locationBackupPayload {
+    WolFoxProStore *store = [WolFoxProStore shared];
+    NSMutableArray *locations = [NSMutableArray new];
+    for (WolFoxProLocation *location in store.locations) {
+        [locations addObject:@{
+            @"name": location.name ?: @"موقع محفوظ",
+            @"latitude": @(location.coordinate.latitude),
+            @"longitude": @(location.coordinate.longitude),
+            @"altitude": @(location.altitude)
+        }];
+    }
+
+    NSMutableArray *history = [NSMutableArray new];
+    for (WolFoxLocationHistoryEntry *entry in store.locationHistory) {
+        [history addObject:@{
+            @"name": entry.name ?: @"موقع مستخدم",
+            @"latitude": @(entry.coordinate.latitude),
+            @"longitude": @(entry.coordinate.longitude),
+            @"used_at": @((entry.usedAt ?: [NSDate date]).timeIntervalSince1970)
+        }];
+    }
+
+    return @{
+        @"format": @"wolfox-location-backup",
+        @"schema_version": @1,
+        @"app_version": [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.8.2",
+        @"created_at": @([NSDate date].timeIntervalSince1970),
+        @"locations": locations,
+        @"history": history
+    };
+}
+
+- (void)exportLocationData {
+    NSError *error = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:[self locationBackupPayload] options:NSJSONWritingPrettyPrinted error:&error];
+    if (!data || error) {
+        [self showToast:@"تعذر إنشاء النسخة الاحتياطية ❌"];
+        return;
+    }
+    NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    [UIPasteboard generalPasteboard].string = json;
+
+    NSString *fileName = [NSString stringWithFormat:@"WolFox-Locations-%@.json", @((long long)[NSDate date].timeIntervalSince1970)];
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    if (![data writeToFile:path options:NSDataWritingAtomic error:&error]) {
+        [self showToast:@"تم النسخ للحافظة، لكن تعذر إنشاء ملف المشاركة"];
+        return;
+    }
+
+    UIActivityViewController *activity = [[UIActivityViewController alloc] initWithActivityItems:@[[NSURL fileURLWithPath:path]] applicationActivities:nil];
+    activity.popoverPresentationController.sourceView = self.view;
+    activity.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+    [self presentViewController:activity animated:YES completion:^{
+        [self showToast:@"تم نسخ النسخة الاحتياطية للحافظة ✅"];
+    }];
+}
+
+- (void)importLocationDataFromClipboard {
+    NSString *json = [UIPasteboard generalPasteboard].string;
+    if (!json.length) {
+        [self showToast:@"الحافظة لا تحتوي على نص JSON"];
+        return;
+    }
+    NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *error = nil;
+    id root = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+    if (error || ![root isKindOfClass:[NSDictionary class]]) {
+        [self showToast:@"ملف JSON غير صالح أو غير مدعوم ❌"];
+        return;
+    }
+    NSDictionary *payload = (NSDictionary *)root;
+    if (![payload[@"format"] isEqual:@"wolfox-location-backup"]) {
+        [self showToast:@"هذه ليست نسخة احتياطية معتمدة من WolFox"];
+        return;
+    }
+    NSArray *rawLocations = [payload[@"locations"] isKindOfClass:[NSArray class]] ? payload[@"locations"] : nil;
+    if (!rawLocations) {
+        [self showToast:@"لا توجد مواقع قابلة للاستيراد"];
+        return;
+    }
+
+    WolFoxProStore *store = [WolFoxProStore shared];
+    NSUInteger imported = 0;
+    NSUInteger skipped = 0;
+    for (id rawItem in rawLocations) {
+        if (![rawItem isKindOfClass:[NSDictionary class]]) { skipped++; continue; }
+        NSDictionary *item = (NSDictionary *)rawItem;
+        id latitudeValue = item[@"latitude"];
+        id longitudeValue = item[@"longitude"];
+        if (![latitudeValue respondsToSelector:@selector(doubleValue)] || ![longitudeValue respondsToSelector:@selector(doubleValue)]) {
+            skipped++;
+            continue;
+        }
+        double latitude = [latitudeValue doubleValue];
+        double longitude = [longitudeValue doubleValue];
+        CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake(latitude, longitude);
+        if (!isfinite(latitude) || !isfinite(longitude) || !CLLocationCoordinate2DIsValid(coordinate)) {
+            skipped++;
+            continue;
+        }
+        NSString *rawName = [item[@"name"] isKindOfClass:[NSString class]] ? item[@"name"] : @"موقع مستورد";
+        NSString *name = [rawName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (!name.length) name = @"موقع مستورد";
+
+        BOOL duplicate = NO;
+        for (WolFoxProLocation *existing in store.locations) {
+            if (fabs(existing.coordinate.latitude - coordinate.latitude) < 0.000001 &&
+                fabs(existing.coordinate.longitude - coordinate.longitude) < 0.000001 &&
+                [existing.name isEqualToString:name]) {
+                duplicate = YES;
+                break;
+            }
+        }
+        if (duplicate) { skipped++; continue; }
+
+        WolFoxProLocation *location = [WolFoxProLocation new];
+        location.name = name;
+        location.coordinate = coordinate;
+        id altitudeValue = item[@"altitude"];
+        location.altitude = [altitudeValue respondsToSelector:@selector(doubleValue)] ? [altitudeValue doubleValue] : 300.0;
+        [store saveLocation:location];
+        imported++;
+    }
+
+    if (imported == 0) {
+        [self showToast:skipped ? @"لم تُضف مواقع جديدة؛ البيانات مكررة أو غير صالحة" : @"النسخة الاحتياطية فارغة"];
+        return;
+    }
+    [self showToast:[NSString stringWithFormat:@"تم استيراد %lu موقعاً وتجاوز %lu ✅", (unsigned long)imported, (unsigned long)skipped]];
+}
+
+- (void)showLocationDataResetOptions {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"مسح بيانات المواقع"
+                                                                   message:@"اختر البيانات التي تريد مسحها. لن يتأثر الترخيص أو الإعدادات."
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    void (^confirmReset)(NSInteger, NSString *, NSString *) = ^(NSInteger mode, NSString *title, NSString *message) {
+        UIAlertController *confirm = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"مسح نهائياً" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+            WolFoxProStore *store = [WolFoxProStore shared];
+            if (mode == 1 || mode == 3) {
+                for (WolFoxProLocation *location in [store.locations copy]) [store deleteLocationID:location.ID];
+            }
+            if (mode == 2 || mode == 3) [store clearLocationHistory];
+            [self showToast:@"تم مسح البيانات المحددة ✅"];
+            if (self->_activePage == 4) [self switchPage:4];
+        }]];
+        [self presentViewController:confirm animated:YES completion:nil];
+    };
+    [sheet addAction:[UIAlertAction actionWithTitle:@"مسح المواقع المفضلة" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        confirmReset(1, @"مسح جميع المفضلة؟", @"سيتم حذف أسماء وإحداثيات المواقع المحفوظة نهائياً.");
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"مسح سجل المواقع" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        confirmReset(2, @"مسح سجل المواقع؟", @"ستبقى المواقع المفضلة محفوظة.");
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"مسح المفضلة والسجل" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        confirmReset(3, @"مسح جميع بيانات المواقع؟", @"سيتم حذف المفضلة وسجل الاستخدام نهائياً.");
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)copyDiagnosticReport {
+    WolFoxProStore *store = [WolFoxProStore shared];
+    NSString *bundleID = NSBundle.mainBundle.bundleIdentifier ?: @"unknown";
+    NSString *appVersion = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"unknown";
+    NSString *report = [NSString stringWithFormat:
+        @"WolFox Diagnostic Report\n"
+         "Version: %@\n"
+         "iOS: %@\n"
+         "Bundle: %@\n"
+         "License valid: %@\n"
+         "GPS spoof: %@\n"
+         "Route: %@\n"
+         "Coordinates: %.6f, %.6f\n"
+         "Favorites: %lu\n"
+         "History: %lu\n"
+         "Identifier layer: %@\n"
+         "Bluetooth spoof: %@\n"
+         "Virtual camera: %@\n",
+         appVersion,
+         UIDevice.currentDevice.systemVersion ?: @"unknown",
+         bundleID,
+         [WFLicenseClient isRuntimeLicenseValid] ? @"yes" : @"no",
+         store.spoofActive ? @"on" : @"off",
+         store.routeActive ? @"on" : @"off",
+         store.currentFakeCoords.latitude,
+         store.currentFakeCoords.longitude,
+         (unsigned long)store.locations.count,
+         (unsigned long)store.locationHistory.count,
+         store.validatedActiveIdentifier ? @"active" : @"inactive",
+         store.bluetoothActive ? @"on" : @"off",
+         store.mediaUploadActive ? @"on" : @"off"];
+    [UIPasteboard generalPasteboard].string = report;
+    [self showToast:@"تم نسخ تقرير التشخيص بدون مفاتيح أو أسرار ✅"];
+}
+
 - (NSArray<UIColor *> *)markerPalette {
     return @[[UIColor systemBlueColor], [UIColor colorWithRed:0.16 green:0.72 blue:0.34 alpha:1.0], [UIColor systemOrangeColor], [UIColor systemPurpleColor], [UIColor systemRedColor], [UIColor systemTealColor]];
 }
