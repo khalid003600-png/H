@@ -53,13 +53,13 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 @property (nonatomic, assign) NSInteger themeIndex;
 @property (nonatomic, assign) NSInteger mapStyle; // 0: Standard, 1: Satellite, 2: Hybrid
 @property (nonatomic, assign) double simSpeed;
-/// Ø§ÙÙØ§ØµÙ Ø§ÙØ²ÙÙÙ ÙØªØ­Ø¯ÙØ« Ø§ÙÙØ³Ø§Ø± Ø§ÙÙÙÙÙ Ø¨Ø§ÙØ«ÙØ§ÙÙ.
+/// الفاصل الزمني لتحديث المسار الوهمي بالثواني.
 @property (nonatomic, assign) NSTimeInterval updateIntervalSeconds;
 @property (nonatomic, assign) BOOL routeActive;
 @property (nonatomic, assign) CLLocationCoordinate2D targetRouteCoords;
 @property (nonatomic, copy, nullable) NSString *spoofedImagePath;
 @property (nonatomic, assign) BOOL mediaUploadActive;
-/// Ø¹ÙØ¯ ØªÙØ¹ÙÙÙ ØªÙØ­ÙØ¸ Ø¢Ø®Ø± ØµÙØ±Ø© ÙÙÙamera Ø§ÙØ§ÙØªØ±Ø§Ø¶ÙØ© Ø¨ÙÙ ÙØ±Ø§Øª ØªØ´ØºÙÙ Ø§ÙØªØ·Ø¨ÙÙ.
+/// عند تفعيله تُحفظ آخر صورة للكamera الافتراضية بين مرات تشغيل التطبيق.
 @property (nonatomic, assign) BOOL rememberCameraImage;
 
 // Local weekly location schedule. It evaluates only while the authorized app process is running.
