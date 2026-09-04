@@ -120,6 +120,30 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
     return l.ID;
 }
 
+- (BOOL)updateLocation:(WolFoxProLocation *)l {
+    if (l.ID <= 0 || !l.name.length || !CLLocationCoordinate2DIsValid(l.coordinate)) return NO;
+    sqlite3_stmt *stmt = NULL;
+    const char *sql = "UPDATE locations SET name = ?, lat = ?, lon = ?, alt = ? WHERE id = ?;";
+    BOOL updated = NO;
+    if (sqlite3_prepare_v2(_db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, [l.name UTF8String], -1, SQLITE_TRANSIENT);
+        sqlite3_bind_double(stmt, 2, l.coordinate.latitude);
+        sqlite3_bind_double(stmt, 3, l.coordinate.longitude);
+        sqlite3_bind_double(stmt, 4, l.altitude);
+        sqlite3_bind_int64(stmt, 5, l.ID);
+        updated = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(_db) > 0;
+    }
+    if (stmt) sqlite3_finalize(stmt);
+    if (!updated) return NO;
+    for (WolFoxProLocation *item in _mutableLocations) {
+        if (item.ID == l.ID) {
+            item.name = l.name; item.coordinate = l.coordinate; item.altitude = l.altitude;
+            break;
+        }
+    }
+    return YES;
+}
+
 - (void)deleteLocationID:(long long)ID {
     sqlite3_stmt *stmt = NULL;
     const char *sql = "DELETE FROM locations WHERE id = ?;";

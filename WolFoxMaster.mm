@@ -3524,16 +3524,23 @@ static BOOL WFMasterProcessIsEligible(void) {
             UIView *row = [[UIView alloc] initWithFrame:CGRectMake(10, cy, 280, 50)];
             row.backgroundColor = [WolFoxProTheme surfaceSecondary]; row.layer.cornerRadius = 12;
             [sv addSubview:row];
-            UILabel *nl = [[UILabel alloc] initWithFrame:CGRectMake(50, 5, 220, 20)];
+            UILabel *nl = [[UILabel alloc] initWithFrame:CGRectMake(104, 5, 166, 20)];
             nl.text = l.name; nl.textColor = [WolFoxProTheme textPrimary]; nl.textAlignment = NSTextAlignmentRight; nl.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
             [row addSubview:nl];
-            UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(50, 25, 220, 20)];
+            UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(104, 25, 166, 20)];
             cl.text = [NSString stringWithFormat:@"%.6f, %.6f", l.coordinate.latitude, l.coordinate.longitude];
             cl.textColor = [WolFoxProTheme textSecondary]; cl.textAlignment = NSTextAlignmentRight; cl.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightMedium];
             [row addSubview:cl];
             UIButton *selB = [UIButton buttonWithType:UIButtonTypeCustom]; selB.frame = row.bounds; selB.tag = i;
             [selB addTarget:self action:@selector(favSelected:) forControlEvents:UIControlEventTouchUpInside];
             [row addSubview:selB];
+            UIButton *editB = [UIButton buttonWithType:UIButtonTypeSystem]; editB.frame = CGRectMake(52, 3, 44, 44);
+            if (@available(iOS 13.0, *)) [editB setImage:[UIImage systemImageNamed:@"pencil"] forState:UIControlStateNormal];
+            editB.tintColor = [WolFoxProTheme accent];
+            objc_setAssociatedObject(editB, "loc_id", @(l.ID), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            [editB addTarget:self action:@selector(editFav:) forControlEvents:UIControlEventTouchUpInside];
+            editB.accessibilityLabel = [NSString stringWithFormat:@"تعديل الموقع %@", l.name ?: @""];
+            [row addSubview:editB];
             UIButton *delB = [UIButton buttonWithType:UIButtonTypeSystem]; delB.frame = CGRectMake(6, 3, 44, 44);
             if (@available(iOS 13.0, *)) [delB setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
             delB.tintColor = [WolFoxProTheme danger];
@@ -3572,6 +3579,38 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self refreshSpoofHeaderStatus];
     [self hidePopup];
     [self showToast:@"تم تثبيت الموقع المفضل وتشغيل التزييف 📍"];
+}
+
+- (void)editFav:(UIButton *)b {
+    NSNumber *locID = objc_getAssociatedObject(b, "loc_id");
+    if (!locID) return;
+    WolFoxProLocation *original = nil;
+    for (WolFoxProLocation *item in [WolFoxProStore shared].locations) {
+        if (item.ID == locID.longLongValue) { original = item; break; }
+    }
+    if (!original) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"تعديل الموقع المحفوظ" message:@"عدّل الاسم أو الإحداثيات ثم اضغط حفظ." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) { tf.placeholder = @"اسم الموقع"; tf.text = original.name ?: @""; tf.textAlignment = NSTextAlignmentRight; }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) { tf.placeholder = @"خط العرض"; tf.text = [NSString stringWithFormat:@"%.6f", original.coordinate.latitude]; tf.keyboardType = UIKeyboardTypeNumbersAndPunctuation; tf.textAlignment = NSTextAlignmentCenter; }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) { tf.placeholder = @"خط الطول"; tf.text = [NSString stringWithFormat:@"%.6f", original.coordinate.longitude]; tf.keyboardType = UIKeyboardTypeNumbersAndPunctuation; tf.textAlignment = NSTextAlignmentCenter; }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"حفظ التعديل" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *name = [alert.textFields[0].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        double lat = alert.textFields[1].text.doubleValue;
+        double lon = alert.textFields[2].text.doubleValue;
+        CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake(lat, lon);
+        if (!name.length || !CLLocationCoordinate2DIsValid(coordinate)) { [self showToast:@"الاسم أو الإحداثيات غير صالحة ❌"]; return; }
+        WolFoxProLocation *updated = [original copy];
+        updated.name = name; updated.coordinate = coordinate;
+        if ([[WolFoxProStore shared] updateLocation:updated]) {
+            [self hidePopup];
+            [self showToast:@"✅ تم تعديل الموقع المحفوظ"];
+            if (self->_activePage == 0) [self switchPage:0];
+        } else {
+            [self showToast:@"تعذر حفظ التعديل، حاول مرة أخرى ❌"];
+        }
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)deleteFav:(UIButton *)b {

@@ -34,6 +34,7 @@ FOUNDATION_EXPORT NSNotificationName const WFSpoofStateDidChangeNotification;
 // Locations (SQLite based)
 @property (readonly, copy, nonatomic) NSArray<WolFoxProLocation *> *locations;
 - (long long)saveLocation:(WolFoxProLocation *)location;
+- (BOOL)updateLocation:(WolFoxProLocation *)location;
 - (void)deleteLocationID:(long long)ID;
 
 // Identifiers (Defaults based)
