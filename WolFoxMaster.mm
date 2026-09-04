@@ -139,6 +139,9 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)importLocationDataFromClipboard;
 - (void)showLocationDataResetOptions;
 - (void)copyDiagnosticReport;
+- (void)refreshRoutePreviewFrom:(CLLocationCoordinate2D)from to:(CLLocationCoordinate2D)to;
+- (void)persistRouteSnapshotFrom:(CLLocationCoordinate2D)from to:(CLLocationCoordinate2D)to;
+- (void)restoreLastRouteSnapshot;
 @end
 
 @implementation WolFoxOverlayWindow
@@ -188,6 +191,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     UILabel *_titleLabel;
     UILabel *_spoofStatusLabel;
     MKPointAnnotation *_currentPin;
+    MKPolyline *_routePreviewPolyline;
     UIView *_mapCard;
     UILabel *_realLocationNoticeLabel;
     UIImageView *_realLocationNoticeIcon;
@@ -1100,7 +1104,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     favoritesCard.layer.cornerRadius = 18;
     [_scrollDashboard addSubview:favoritesCard];
 
-    UIView *routeCard = [[UIView alloc] initWithFrame:CGRectMake(15, cy, w - 30, 276)];
+    NSDictionary *lastRouteSnapshot = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"WF_PRO_LAST_ROUTE_SNAPSHOT"];
+    BOOL hasLastRouteSnapshot = [lastRouteSnapshot isKindOfClass:[NSDictionary class]];
+    UIView *routeCard = [[UIView alloc] initWithFrame:CGRectMake(15, cy, w - 30, 334)];
     routeCard.backgroundColor = [WolFoxProTheme surfacePrimary];
     routeCard.layer.cornerRadius = 18;
     [_scrollDashboard addSubview:routeCard];
@@ -1183,7 +1189,22 @@ static BOOL WFMasterProcessIsEligible(void) {
     [savedRoutesButton addTarget:self action:@selector(showSavedRoutes) forControlEvents:UIControlEventTouchUpInside];
     savedRoutesButton.accessibilityLabel = @"إدارة مسارات الحركة المحفوظة";
     [routeCard addSubview:savedRoutesButton];
-    cy += 291;
+
+    UIButton *restoreRouteButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    restoreRouteButton.frame = CGRectMake(18, 266, routeCard.bounds.size.width - 36, 48);
+    restoreRouteButton.backgroundColor = [[WolFoxProTheme gold] colorWithAlphaComponent:0.13];
+    restoreRouteButton.layer.cornerRadius = 12;
+    [restoreRouteButton setTitle:(hasLastRouteSnapshot ? @"استعادة آخر مسار" : @"لا يوجد مسار للاستعادة") forState:UIControlStateNormal];
+    [restoreRouteButton setTitleColor:[WolFoxProTheme gold] forState:UIControlStateNormal];
+    restoreRouteButton.titleLabel.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [restoreRouteButton setImage:[UIImage systemImageNamed:@"arrow.uturn.backward.circle.fill"] forState:UIControlStateNormal];
+    restoreRouteButton.tintColor = [WolFoxProTheme gold];
+    restoreRouteButton.enabled = hasLastRouteSnapshot;
+    restoreRouteButton.alpha = hasLastRouteSnapshot ? 1.0 : 0.45;
+    [restoreRouteButton addTarget:self action:@selector(restoreLastRouteSnapshot) forControlEvents:UIControlEventTouchUpInside];
+    restoreRouteButton.accessibilityLabel = hasLastRouteSnapshot ? @"استعادة إعداد آخر مسار من نقطة التوقف" : @"لا يوجد مسار سابق";
+    [routeCard addSubview:restoreRouteButton];
+    cy += 349;
 
     UILabel *favoritesTitle = [[UILabel alloc] initWithFrame:CGRectMake(18, 14, favoritesCard.bounds.size.width - 36, 24)];
     favoritesTitle.text = @"المفضلة";
@@ -1964,6 +1985,48 @@ static BOOL WFMasterProcessIsEligible(void) {
     if (l) l.text = [NSString stringWithFormat:@"السرعة: %.0f كم/س", s.value];
 }
 
+- (void)refreshRoutePreviewFrom:(CLLocationCoordinate2D)from to:(CLLocationCoordinate2D)to {
+    if (!self.mapView) return;
+    if (_routePreviewPolyline) {
+        [self.mapView removeOverlay:_routePreviewPolyline];
+        _routePreviewPolyline = nil;
+    }
+    if (!CLLocationCoordinate2DIsValid(from) || !CLLocationCoordinate2DIsValid(to) ||
+        (fabs(from.latitude - to.latitude) < DBL_EPSILON && fabs(from.longitude - to.longitude) < DBL_EPSILON)) return;
+    CLLocationCoordinate2D coordinates[2] = { from, to };
+    _routePreviewPolyline = [MKPolyline polylineWithCoordinates:coordinates count:2];
+    [self.mapView addOverlay:_routePreviewPolyline level:MKOverlayLevelAboveRoads];
+}
+
+- (void)persistRouteSnapshotFrom:(CLLocationCoordinate2D)from to:(CLLocationCoordinate2D)to {
+    if (!CLLocationCoordinate2DIsValid(from) || !CLLocationCoordinate2DIsValid(to)) return;
+    WolFoxProStore *store = [WolFoxProStore shared];
+    NSDictionary *snapshot = @{
+        @"name": @"آخر مسار",
+        @"fromLat": @(from.latitude),
+        @"fromLon": @(from.longitude),
+        @"toLat": @(to.latitude),
+        @"toLon": @(to.longitude),
+        @"speed": @(MAX(1.0, store.simSpeed)),
+        @"interval": @(WFClampGPSUpdateInterval(store.updateIntervalSeconds)),
+        @"jitter": @(store.jitterActive),
+        @"savedAt": @([NSDate date].timeIntervalSince1970)
+    };
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:snapshot forKey:@"WF_PRO_LAST_ROUTE_SNAPSHOT"];
+    [defaults synchronize];
+}
+
+- (void)restoreLastRouteSnapshot {
+    NSDictionary *snapshot = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"WF_PRO_LAST_ROUTE_SNAPSHOT"];
+    if (![snapshot isKindOfClass:[NSDictionary class]]) {
+        [self showToast:@"لا يوجد مسار سابق قابل للاستعادة"];
+        return;
+    }
+    [self applySavedRoute:snapshot run:NO];
+    [self showToast:@"تمت استعادة آخر مسار؛ اضغط بدء للمتابعة ✅"];
+}
+
 - (void)saveCurrentRoute {
     WolFoxProStore *store = [WolFoxProStore shared];
     CLLocationCoordinate2D from = store.currentFakeCoords;
@@ -1975,12 +2038,26 @@ static BOOL WFMasterProcessIsEligible(void) {
     [ac addTextFieldWithConfigurationHandler:^(UITextField *tf){ tf.placeholder = @"اسم المسار"; tf.text = @"مسار جديد"; tf.textAlignment = NSTextAlignmentRight; }];
     [ac addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
     [ac addAction:[UIAlertAction actionWithTitle:@"حفظ" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action){
-        NSString *name = ac.textFields.firstObject.text.length ? ac.textFields.firstObject.text : @"مسار جديد";
+        NSString *rawName = ac.textFields.firstObject.text ?: @"";
+        NSString *name = [rawName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (!name.length) name = @"مسار جديد";
         NSMutableArray *routes = [[[NSUserDefaults standardUserDefaults] arrayForKey:@"WF_PRO_SAVED_ROUTES"] mutableCopy] ?: [NSMutableArray new];
-        [routes addObject:@{ @"name": name, @"fromLat": @(from.latitude), @"fromLon": @(from.longitude), @"toLat": @(to.latitude), @"toLon": @(to.longitude), @"speed": @(MAX(1.0, store.simSpeed)) }];
+        NSDictionary *savedRoute = @{
+            @"routeID": [[NSUUID UUID] UUIDString],
+            @"name": name,
+            @"fromLat": @(from.latitude), @"fromLon": @(from.longitude),
+            @"toLat": @(to.latitude), @"toLon": @(to.longitude),
+            @"speed": @(MAX(1.0, store.simSpeed)),
+            @"interval": @(WFClampGPSUpdateInterval(store.updateIntervalSeconds)),
+            @"jitter": @(store.jitterActive)
+        };
+        [routes insertObject:savedRoute atIndex:0];
+        while (routes.count > 25) [routes removeLastObject];
         [[NSUserDefaults standardUserDefaults] setObject:routes forKey:@"WF_PRO_SAVED_ROUTES"];
         [[NSUserDefaults standardUserDefaults] synchronize];
-        [self showToast:@"تم حفظ مسار الحركة في المفضلة"]; 
+        [self persistRouteSnapshotFrom:from to:to];
+        [self refreshRoutePreviewFrom:from to:to];
+        [self showToast:@"تم حفظ المسار مع السرعة والفاصل والحركة ✅"]; 
     }]];
     [self presentViewController:ac animated:YES completion:nil];
 }
@@ -1997,9 +2074,10 @@ static BOOL WFMasterProcessIsEligible(void) {
         NSDictionary *route = routes[i];
         NSString *name = [route[@"name"] isKindOfClass:NSString.class] ? route[@"name"] : @"مسار";
         double speed = [route[@"speed"] doubleValue];
+        double interval = [route[@"interval"] respondsToSelector:@selector(doubleValue)] ? [route[@"interval"] doubleValue] : WFDefaultGPSUpdateIntervalSeconds;
         double fromLat = [route[@"fromLat"] doubleValue], fromLon = [route[@"fromLon"] doubleValue];
         double toLat   = [route[@"toLat"]   doubleValue], toLon   = [route[@"toLon"]   doubleValue];
-        NSString *detail = [NSString stringWithFormat:@"%.4f,%.4f → %.4f,%.4f @ %.0f كم/س", fromLat, fromLon, toLat, toLon, speed];
+        NSString *detail = [NSString stringWithFormat:@"%.4f,%.4f → %.4f,%.4f • %.0f كم/س • %.2f ث", fromLat, fromLon, toLat, toLon, speed, interval];
 
         // كل مسار: زر يُفتح منه actionsheet داخلي بخيارات تشغيل/تعديل/حذف
         NSUInteger capturedIndex = i;
@@ -2050,10 +2128,22 @@ static BOOL WFMasterProcessIsEligible(void) {
     CLLocationCoordinate2D from = CLLocationCoordinate2DMake([route[@"fromLat"] doubleValue], [route[@"fromLon"] doubleValue]);
     CLLocationCoordinate2D to = CLLocationCoordinate2DMake([route[@"toLat"] doubleValue], [route[@"toLon"] doubleValue]);
     if (!CLLocationCoordinate2DIsValid(from) || !CLLocationCoordinate2DIsValid(to)) { [self showToast:@"المسار المحفوظ غير صالح"]; return; }
+    if (fabs(from.latitude - to.latitude) < DBL_EPSILON && fabs(from.longitude - to.longitude) < DBL_EPSILON) {
+        [self showToast:@"نقطة البداية والهدف متطابقتان"]; return;
+    }
     WolFoxProStore *store = [WolFoxProStore shared];
-    store.currentFakeCoords = from; store.targetRouteCoords = to; store.simSpeed = MAX(1.0, [route[@"speed"] doubleValue]);
-    [store saveSettings]; [self updateMapPin:from];
-    if (run) [self toggleRouteSimulation]; else [self showToast:@"تم تحميل المسار للتعديل من بطاقة الحركة"]; 
+    double savedSpeed = [route[@"speed"] respondsToSelector:@selector(doubleValue)] ? [route[@"speed"] doubleValue] : store.simSpeed;
+    double savedInterval = [route[@"interval"] respondsToSelector:@selector(doubleValue)] ? [route[@"interval"] doubleValue] : store.updateIntervalSeconds;
+    store.currentFakeCoords = from;
+    store.targetRouteCoords = to;
+    store.simSpeed = MAX(1.0, MIN(120.0, savedSpeed));
+    store.updateIntervalSeconds = WFClampGPSUpdateInterval(savedInterval);
+    if ([route[@"jitter"] respondsToSelector:@selector(boolValue)]) store.jitterActive = [route[@"jitter"] boolValue];
+    [store saveSettings];
+    [self updateMapPin:from];
+    [self refreshRoutePreviewFrom:from to:to];
+    [self persistRouteSnapshotFrom:from to:to];
+    if (run) [self toggleRouteSimulation]; else [self showToast:@"تم تحميل المسار بكامل إعداداته للتعديل"]; 
 }
 
 - (void)toggleRouteSimulation {
@@ -2066,6 +2156,9 @@ static BOOL WFMasterProcessIsEligible(void) {
         [alert addAction:[UIAlertAction actionWithTitle:@"متابعة المسار" style:UIAlertActionStyleCancel handler:nil]];
         [alert addAction:[UIAlertAction actionWithTitle:@"إيقاف الآن" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
             [[WolFoxProHookManager shared] stopRoute];
+            WolFoxProStore *stoppedStore = [WolFoxProStore shared];
+            [self persistRouteSnapshotFrom:stoppedStore.currentFakeCoords to:stoppedStore.targetRouteCoords];
+            [self refreshRoutePreviewFrom:stoppedStore.currentFakeCoords to:stoppedStore.targetRouteCoords];
             if (self->_currentPin) {
                 [self.mapView removeAnnotation:self->_currentPin];
                 [self.mapView addAnnotation:self->_currentPin];
@@ -2095,10 +2188,22 @@ static BOOL WFMasterProcessIsEligible(void) {
             [WolFoxProStore shared].targetRouteCoords = to;
             [self showToast:@"⚡ لم يُحدَّد هدف — يتحرك شمالاً 1 كم تلقائياً"];
         }
+        if (!CLLocationCoordinate2DIsValid(from) || !CLLocationCoordinate2DIsValid(to) ||
+            (fabs(from.latitude - to.latitude) < DBL_EPSILON && fabs(from.longitude - to.longitude) < DBL_EPSILON)) {
+            [self showToast:@"حدد بداية وهدفاً صالحين ومختلفين"]; return;
+        }
+        [self persistRouteSnapshotFrom:from to:to];
+        [self refreshRoutePreviewFrom:from to:to];
+
+        CLLocation *fromLocation = [[CLLocation alloc] initWithLatitude:from.latitude longitude:from.longitude];
+        CLLocation *toLocation = [[CLLocation alloc] initWithLatitude:to.latitude longitude:to.longitude];
+        CLLocationDistance distance = [fromLocation distanceFromLocation:toLocation];
+        NSUInteger segmentCount = (NSUInteger)MAX(10.0, MIN(120.0, ceil(distance / 250.0)));
         NSMutableArray *waypoints = [NSMutableArray new];
-        for (int i = 0; i <= 10; i++) {
-            double lat = from.latitude  + (to.latitude  - from.latitude)  * (i / 10.0);
-            double lon = from.longitude + (to.longitude - from.longitude) * (i / 10.0);
+        for (NSUInteger index = 0; index <= segmentCount; index++) {
+            double progress = (double)index / (double)segmentCount;
+            double lat = from.latitude  + (to.latitude  - from.latitude)  * progress;
+            double lon = from.longitude + (to.longitude - from.longitude) * progress;
             [waypoints addObject:[[CLLocation alloc] initWithLatitude:lat longitude:lon]];
         }
         [[WolFoxProHookManager shared] startRouteWithWaypoints:waypoints speedKmh:[WolFoxProStore shared].simSpeed];
@@ -3623,6 +3728,8 @@ static BOOL WFMasterProcessIsEligible(void) {
         targetPin.subtitle = @"اضغط «بدء محاكاة المسار» للانطلاق";
         [self.mapView addAnnotation:targetPin];
         objc_setAssociatedObject(self, "_target_pin", targetPin, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [self refreshRoutePreviewFrom:store.currentFakeCoords to:c];
+        [self persistRouteSnapshotFrom:store.currentFakeCoords to:c];
         [self showToast:@"📍 تم تحديد نقطة الوصول — اضغط «بدء» للانطلاق"];
         return;
     }
@@ -3766,6 +3873,19 @@ static BOOL WFMasterProcessIsEligible(void) {
     } else {
         [self showToast:@"تنسيق الإحداثيات غير صحيح ❌"];
     }
+}
+
+- (MKOverlayRenderer *)mapView:(MKMapView *)mapView rendererForOverlay:(id<MKOverlay>)overlay {
+    (void)mapView;
+    if ([overlay isKindOfClass:[MKPolyline class]]) {
+        MKPolylineRenderer *renderer = [[MKPolylineRenderer alloc] initWithPolyline:(MKPolyline *)overlay];
+        renderer.strokeColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.9];
+        renderer.lineWidth = 5.0;
+        renderer.lineCap = kCGLineCapRound;
+        renderer.lineJoin = kCGLineJoinRound;
+        return renderer;
+    }
+    return [[MKOverlayRenderer alloc] initWithOverlay:overlay];
 }
 
 - (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id<MKAnnotation>)annotation {
