@@ -27,6 +27,8 @@ jobs:
     env:
       THEOS: ${{ github.workspace }}/.theos
       WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
+      WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+      WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
     steps:
       - uses: actions/checkout@v4
       - name: Install compatibility-check dependencies
