@@ -98,6 +98,9 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)hideInputKeyboard;
 - (void)keyboardBackPressed;
 - (void)pasteSearchText;
+- (void)copySearchText;
+- (void)copyCoordinates;
+- (void)keyboardNextPressed;
 - (void)searchFromKeyboard;
 - (void)applyCoordinatesFromKeyboard;
 - (void)refreshSpoofSchedulePage;
@@ -2221,14 +2224,18 @@ static BOOL WFMasterProcessIsEligible(void) {
 
     UIBarButtonItem *paste = [[UIBarButtonItem alloc] initWithTitle:@"لصق" style:UIBarButtonItemStylePlain target:self action:(searchMode ? @selector(pasteSearchText) : @selector(pasteCoordinates))];
     paste.accessibilityLabel = searchMode ? @"لصق نص البحث" : @"لصق الإحداثيات";
+    UIBarButtonItem *copy = [[UIBarButtonItem alloc] initWithTitle:@"نسخ" style:UIBarButtonItemStylePlain target:self action:(searchMode ? @selector(copySearchText) : @selector(copyCoordinates))];
+    copy.accessibilityLabel = searchMode ? @"نسخ نص البحث" : @"نسخ الإحداثيات";
+    UIBarButtonItem *next = [[UIBarButtonItem alloc] initWithTitle:@"إدخال" style:UIBarButtonItemStylePlain target:self action:@selector(keyboardNextPressed)];
+    next.accessibilityLabel = @"الانتقال للحقل التالي أو التنفيذ";
     UIBarButtonItem *back = [[UIBarButtonItem alloc] initWithTitle:@"رجوع" style:UIBarButtonItemStylePlain target:self action:@selector(keyboardBackPressed)];
     back.accessibilityLabel = @"حذف آخر حرف";
     UIBarButtonItem *spacer = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
     UIBarButtonItem *action = [[UIBarButtonItem alloc] initWithTitle:(searchMode ? @"بحث" : @"تفعيل") style:UIBarButtonItemStyleDone target:self action:(searchMode ? @selector(searchFromKeyboard) : @selector(applyCoordinatesFromKeyboard))];
     action.accessibilityLabel = searchMode ? @"تنفيذ البحث" : @"تطبيق الإحداثيات وتفعيل التزييف";
-    UIBarButtonItem *hide = [[UIBarButtonItem alloc] initWithTitle:@"إخفاء" style:UIBarButtonItemStylePlain target:self action:@selector(hideInputKeyboard)];
-    hide.accessibilityLabel = @"إخفاء لوحة المفاتيح";
-    toolbar.items = @[paste, back, spacer, action, hide];
+    UIBarButtonItem *hide = [[UIBarButtonItem alloc] initWithTitle:@"طي" style:UIBarButtonItemStylePlain target:self action:@selector(hideInputKeyboard)];
+    hide.accessibilityLabel = @"طي لوحة المفاتيح";
+    toolbar.items = @[paste, copy, next, back, spacer, action, hide];
     textField.inputAccessoryView = toolbar;
 }
 
@@ -2249,6 +2256,29 @@ static BOOL WFMasterProcessIsEligible(void) {
     } else if (_lonInput.isFirstResponder) {
         [_lonInput deleteBackward];
     }
+}
+
+- (void)copySearchText {
+    NSString *text = self.searchBar.text ?: @"";
+    if (!text.length) { [self showToast:@"لا يوجد نص لنسخه"]; return; }
+    UIPasteboard.generalPasteboard.string = text;
+    [self showToast:@"تم نسخ نص البحث"];
+}
+
+- (void)copyCoordinates {
+    NSString *latitude = _latInput.text ?: @"";
+    NSString *longitude = _lonInput.text ?: @"";
+    if (!latitude.length || !longitude.length) { [self showToast:@"أدخل الإحداثيات أولاً"]; return; }
+    UIPasteboard.generalPasteboard.string = [NSString stringWithFormat:@"%@, %@", latitude, longitude];
+    [self showToast:@"تم نسخ الإحداثيات"];
+}
+
+- (void)keyboardNextPressed {
+    UITextField *searchField = nil;
+    if (@available(iOS 13.0, *)) searchField = self.searchBar.searchTextField;
+    if (searchField.isFirstResponder) { [self searchFromKeyboard]; return; }
+    if (_latInput.isFirstResponder) { [_lonInput becomeFirstResponder]; return; }
+    [self applyCoordinatesFromKeyboard];
 }
 
 - (void)pasteSearchText {
