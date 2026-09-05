@@ -137,6 +137,10 @@
     self.codeField.textAlignment = NSTextAlignmentCenter;
     self.codeField.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightBlack];
     self.codeField.delegate = self;
+    self.codeField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    self.codeField.accessibilityLabel = @"كود تفعيل WolFox";
+    self.codeField.accessibilityHint = @"اكتب الكود أو استخدم زر اللصق ثم اضغط تحقق وتفعيل";
+    [self.codeField addTarget:self action:@selector(activationCodeEditingChanged:) forControlEvents:UIControlEventEditingChanged];
     self.codeField.text = [WFLicenseClient storedCode] ?: @"";
     UIButton *pasteCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     pasteCodeButton.frame = CGRectMake(0, 0, 48, 56);
@@ -162,7 +166,7 @@
     self.activateButton.layer.borderWidth = 1.0;
     self.activateButton.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.38].CGColor;
     self.activateButton.adjustsImageWhenHighlighted = YES;
-    [self.activateButton setTitle:@"تفعيل الآن" forState:UIControlStateNormal];
+    [self.activateButton setTitle:@"تحقق من الكود وتفعيل الأداة" forState:UIControlStateNormal];
     [self.activateButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.activateButton.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBlack];
     
@@ -171,6 +175,8 @@
     self.activateButton.layer.shadowOffset = CGSizeMake(0, 4);
     self.activateButton.layer.shadowOpacity = 0.8;
     self.activateButton.layer.shadowRadius = 10;
+    self.activateButton.accessibilityLabel = @"تحقق من كود التفعيل";
+    self.activateButton.accessibilityHint = @"يتحقق من صلاحية الكود ثم يعرض تفاصيل الاشتراك";
     [self.activateButton addTarget:self action:@selector(activatePressed) forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:self.activateButton];
 
@@ -185,7 +191,8 @@
     self.statusLabel.hidden = YES;
     self.statusLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
-    self.statusLabel.numberOfLines = 4;
+    self.statusLabel.numberOfLines = 0;
+    self.statusLabel.accessibilityTraits = UIAccessibilityTraitUpdatesFrequently;
     [card addSubview:self.statusLabel];
 
     self.updateButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -205,9 +212,10 @@
     self.showToolButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.showToolButton.backgroundColor = [WolFoxProTheme royalBlue];
     self.showToolButton.layer.cornerRadius = 12.0;
-    [self.showToolButton setTitle:@"عرض الأداة" forState:UIControlStateNormal];
+    [self.showToolButton setTitle:@"فتح لوحة WolFox الآن" forState:UIControlStateNormal];
     [self.showToolButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.showToolButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
+    self.showToolButton.accessibilityLabel = @"فتح لوحة WolFox بعد نجاح التفعيل";
     [self.showToolButton addTarget:self action:@selector(showToolPressed) forControlEvents:UIControlEventTouchUpInside];
     self.showToolButton.hidden = YES;
     [card addSubview:self.showToolButton];
@@ -216,9 +224,10 @@
     self.skipButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.skipButton.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.16];
     self.skipButton.layer.cornerRadius = 12.0;
-    [self.skipButton setTitle:@"تخطي الآن" forState:UIControlStateNormal];
+    [self.skipButton setTitle:@"البقاء في التطبيق وفتح اللوحة لاحقاً" forState:UIControlStateNormal];
     [self.skipButton setTitleColor:[WolFoxProTheme textPrimary] forState:UIControlStateNormal];
     self.skipButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    self.skipButton.accessibilityLabel = @"إغلاق نتيجة التفعيل وفتح اللوحة لاحقاً";
     [self.skipButton addTarget:self action:@selector(skipPressed) forControlEvents:UIControlEventTouchUpInside];
     self.skipButton.hidden = YES;
     [card addSubview:self.skipButton];
@@ -351,10 +360,31 @@
         [self showActivationError:@"الحافظة فارغة؛ انسخ كود التفعيل ثم حاول مرة أخرى."];
         return;
     }
-    self.codeField.text = [[text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
+    self.codeField.text = [self normalizedActivationCode:text];
     self.statusLabel.hidden = YES;
     self.statusLabel.text = @"";
+    [self activationCodeEditingChanged:self.codeField];
     [self.codeField becomeFirstResponder];
+}
+
+- (NSString *)normalizedActivationCode:(NSString *)value {
+    NSString *upper = [[value ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
+    NSArray<NSString *> *parts = [upper componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return [parts componentsJoinedByString:@""];
+}
+
+- (void)activationCodeEditingChanged:(UITextField *)field {
+    NSString *normalized = [self normalizedActivationCode:field.text];
+    if (![field.text isEqualToString:normalized]) field.text = normalized;
+    BOOL hasCode = normalized.length > 0;
+    self.activateButton.alpha = hasCode ? 1.0 : 0.55;
+    self.activateButton.accessibilityValue = hasCode ? @"الكود جاهز للتحقق" : @"أدخل الكود أولاً";
+    if (!self.activateButton.enabled && !self.loadingOverlay.hidden) return;
+    self.activateButton.enabled = hasCode;
+    if (!self.statusLabel.hidden) {
+        self.statusLabel.hidden = YES;
+        self.statusLabel.text = @"";
+    }
 }
 
 - (void)keyboardWillShow:(NSNotification *)notification {
@@ -392,7 +422,8 @@
 
 - (void)activatePressed {
     if (!self.activateButton.enabled) return;
-    NSString *code = [self.codeField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *code = [self normalizedActivationCode:self.codeField.text];
+    self.codeField.text = code;
     WFLog(@"[WolFox][ACT] activation_submitted length=%lu", (unsigned long)code.length);
     if (code.length == 0) {
         [self showActivationError:@"أدخل كود التفعيل أولاً ثم حاول مرة أخرى."];
@@ -411,7 +442,7 @@
 }
 
 - (void)finalizeActivation {
-    NSString *code = [self.codeField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *code = [self normalizedActivationCode:self.codeField.text];
     WFLog(@"[WolFox][ACT] server_activation_begin length=%lu", (unsigned long)code.length);
     __weak typeof(self) weakSelf = self;
     [WFLicenseClient activateCode:code completion:^(WFLicenseResult *result) {
@@ -437,7 +468,9 @@
             self.showToolButton.hidden = NO;
             self.skipButton.hidden = NO;
             self.activateButton.enabled = NO;
-            [self.activateButton setTitle:@"تم التفعيل بنجاح" forState:UIControlStateNormal];
+            [self.activateButton setTitle:@"✓ الكود صالح وتم التفعيل" forState:UIControlStateNormal];
+            self.codeField.enabled = NO;
+            self.exitButton.hidden = YES;
             [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.loadingOverlay.alpha = 0; } completion:^(BOOL finished) {
                 self.loadingOverlay.hidden = YES;
             }];
@@ -446,7 +479,8 @@
             [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
             
             // يبقى ملخص التفعيل ظاهراً حتى يختار العميل عرض الأداة أو التخطي.
-            [self showToastMessage:@"تم تفعيل الكود بنجاح. راجع مدة الاشتراك ثم اختر الإجراء."];
+            [self showToastMessage:@"تم التفعيل. راجع تفاصيل الاشتراك ثم افتح لوحة WolFox."];
+            UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, self.statusLabel);
         } else {
             WFLog(@"[WolFox][ACT] server_activation_failed status=%ld", (long)result.status);
             [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{ self.loadingOverlay.alpha = 0; } completion:^(BOOL f){
@@ -460,7 +494,7 @@
                 [feedback prepare];
                 [feedback notificationOccurred:UINotificationFeedbackTypeError];
                 self.activateButton.enabled = YES;
-                [self.activateButton setTitle:@"تفعيل الآن" forState:UIControlStateNormal];
+                [self.activateButton setTitle:@"إعادة التحقق من الكود" forState:UIControlStateNormal];
                 self.timerLabel.hidden = NO;
             }];
         }
@@ -496,7 +530,7 @@
     NSString *plan = result.planName.length ? result.planName : @"غير محددة";
     NSString *started = result.startedAt.length ? result.startedAt : @"غير متوفر";
     NSString *expires = result.expiresAt.length ? result.expiresAt : @"غير متوفر";
-    return [NSString stringWithFormat:@"تم تفعيل بنجاح\nالمدة: %@\nتاريخ البداية: %@\nتاريخ النهاية: %@", plan, started, expires];
+    return [NSString stringWithFormat:@"✅ تم التفعيل بنجاح\nالباقة: %@\nبداية الاشتراك: %@\nنهاية الاشتراك: %@\nالجهاز: مرتبط ومصرّح\nاختر «فتح لوحة WolFox الآن» للمتابعة.", plan, started, expires];
 }
 
 - (UIColor *)statusColorForResult:(WFLicenseResult *)result {
@@ -518,7 +552,7 @@
 - (void)showActivationError:(NSString *)message {
     self.statusLabel.textColor = [UIColor colorWithRed:1.0 green:0.50 blue:0.50 alpha:1.0];
     self.statusLabel.backgroundColor = [UIColor colorWithRed:0.35 green:0.08 blue:0.10 alpha:0.72];
-    self.statusLabel.text = [NSString stringWithFormat:@"فشل تفعيل الكود\n%@", message ?: @"تعذر إكمال التفعيل"];
+    self.statusLabel.text = [NSString stringWithFormat:@"❌ لم يتم التفعيل\n%@\nيمكنك تصحيح الكود والمحاولة مجدداً.", message ?: @"تعذر إكمال التفعيل"];
     self.statusLabel.hidden = NO;
     self.statusLabel.alpha = 0;
     // FIX: show exit button so user can dismiss after a failed attempt
