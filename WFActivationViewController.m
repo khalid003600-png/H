@@ -509,7 +509,7 @@
                 [self showActivationError:[self friendlyActivationMessage:result]];
                 [self applyStatusStyleForResult:result];
                 [self.lockIcon.layer removeAllAnimations];
-                self.lockIcon.image = [UIImage systemImageNamed:@"iphone.circle.fill"];
+                self.lockIcon.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
                 self.lockIcon.tintColor = [self statusColorForResult:result];
                 UINotificationFeedbackGenerator *feedback = [UINotificationFeedbackGenerator new];
                 [feedback prepare];

@@ -273,6 +273,15 @@ static BOOL WFMasterProcessIsEligible(void) {
     _onboardingOverlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.76];
     [self.view addSubview:_onboardingOverlay];
 
+#if WOLFOX_LITE
+    NSArray<NSString *> *titles = @[@"مرحباً بك في WolFox Lite", @"الموقع والمفضلة", @"الإعدادات والإخفاء"];
+    NSArray<NSString *> *messages = @[
+        @"هذه جولة إرشادية قصيرة لشرح وظائف نسخة Lite. يمكنك الضغط على تخطي في أي وقت.",
+        @"استخدم الخريطة والبحث والإحداثيات والمفضلة لتحديد الموقع وتشغيل الوظائف المرتبطة به.",
+        @"من الإعدادات راجع حالة الاشتراك، تحكم في الإخفاء، وتحقق من إصدار WolFox Lite."
+    ];
+    NSString *onboardingEdition = @"WOLFOX LITE";
+#else
     NSArray<NSString *> *titles = @[@"مرحباً بك في WolFox Full", @"الخريطة", @"الكاميرا الافتراضية", @"المفضلة والجدولة", @"الإخفاء والواجهة العائمة", @"الإعدادات والاشتراك"];
     NSArray<NSString *> *messages = @[
         @"هذه جولة إرشادية قصيرة لشرح أهم وظائف النسخة الكاملة. يمكنك الضغط على تخطي في أي وقت.",
@@ -282,6 +291,8 @@ static BOOL WFMasterProcessIsEligible(void) {
         @"بعد فتح كاميرا التطبيق اضغط مطولاً في منتصف الشاشة لإظهار الأيقونة؛ اسحبها لأكثر من ثانيتين للتبديل السريع.",
         @"من الإعدادات غيّر المظهر والألوان والتنبيهات، وراجع حالة الاشتراك وإصدار WolFox Full."
     ];
+    NSString *onboardingEdition = @"WOLFOX FULL";
+#endif
     NSInteger step = MIN(_onboardingStep, (NSInteger)titles.count - 1);
     CGFloat width = self.view.bounds.size.width - 32.0;
     CGFloat height = 190.0;
@@ -294,7 +305,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [_onboardingOverlay addSubview:card];
 
     UILabel *counter = [[UILabel alloc] initWithFrame:CGRectMake(18, 12, width - 36, 18)];
-    counter.text = [NSString stringWithFormat:@"WOLFOX FULL  •  %ld / %lu", (long)step + 1, (unsigned long)titles.count];
+    counter.text = [NSString stringWithFormat:@"%@  •  %ld / %lu", onboardingEdition, (long)step + 1, (unsigned long)titles.count];
     counter.textColor = [WolFoxProTheme accent];
     counter.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightBlack];
     counter.textAlignment = NSTextAlignmentRight;
@@ -360,7 +371,11 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.view addSubview:_header];
     
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(18, safeTop + 7, 135, 26)];
-    _titleLabel.text = @"Fake GPS Wolf";
+#if WOLFOX_LITE
+    _titleLabel.text = @"WolFox Lite";
+#else
+    _titleLabel.text = @"WolFox Full";
+#endif
     _titleLabel.textAlignment = NSTextAlignmentLeft;
     _titleLabel.font = [WolFoxProTheme fontOfSize:20 weight:UIFontWeightBlack];
     _titleLabel.textColor = [WolFoxProTheme textPrimary];
