@@ -1,4 +1,4 @@
-name: Build WolFox 1.8.2
+name: Build WolFox 1.8.3
 
 on:
   push:
@@ -44,16 +44,16 @@ jobs:
         run: ./wolfox_setup_build.sh
       - name: Verify outputs
         run: |
-          test -f WolFox.dylib
-          find . -maxdepth 1 -type f -name 'WolFox*_Rootful.deb' -print -quit | grep -q .
-          find . -maxdepth 1 -type f -name 'WolFox*_Rootless.deb' -print -quit | grep -q .
+          test -s WolFox.dylib
+          test -s WolFox_v1.8.3-Full_iOS15.8-26.5_Rootful.deb
+          test -s WolFox_v1.8.3-Full_iOS15.8-26.5_Rootless.deb
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: WolFox-iOS-arm64-${{ github.run_number }}
+          name: WolFox-1.8.3-iOS15.8-26.5-arm64-${{ github.run_number }}
           path: |
             WolFox.dylib
-            WolFox*_Rootful.deb
-            WolFox*_Rootless.deb
+            WolFox_v1.8.3-Full_iOS15.8-26.5_Rootful.deb
+            WolFox_v1.8.3-Full_iOS15.8-26.5_Rootless.deb
           if-no-files-found: error
           retention-days: 14
