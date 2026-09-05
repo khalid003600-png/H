@@ -17,6 +17,7 @@ check "$VIEW" "نهاية الاشتراك:" "عرض نهاية الاشتراك
 check "$VIEW" "الجهاز: مرتبط ومصرّح" "توضيح حالة ربط الجهاز"
 check "$VIEW" "فتح لوحة WolFox الآن" "الإجراء التالي بعد التفعيل واضح"
 check "$VIEW" "البقاء في التطبيق وفتح اللوحة لاحقاً" "خيار ما بعد التفعيل واضح"
-check "$CLIENT" "storeLicenseCode" "استمرار حفظ الكود في طبقة الترخيص"
+check "$CLIENT" "saveToKeychain:trimmed key:kCodeKey" "حفظ الكود في Keychain عند نجاح التفعيل"
+check "$CLIENT" "+ (NSString *)storedCode { return [self loadFromKeychain:kCodeKey]; }" "استعادة الكود المحفوظ من Keychain"
 
 echo "✅ اجتازت واجهة التفعيل الجديدة اختبارات الحماية."
