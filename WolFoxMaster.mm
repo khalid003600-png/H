@@ -1304,12 +1304,12 @@ static BOOL WFMasterProcessIsEligible(void) {
     selectButton.frame = CGRectMake(18, 226, card.bounds.size.width - 36, 44);
     selectButton.backgroundColor = [WolFoxProTheme accent];
     selectButton.layer.cornerRadius = 12.0;
-    [selectButton setTitle:@"اختيار صورة وتشغيلها" forState:UIControlStateNormal];
+    [selectButton setTitle:@"١. اختيار صورة وتشغيل البث" forState:UIControlStateNormal];
     [selectButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     selectButton.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
     if (@available(iOS 13.0, *)) [selectButton setImage:[UIImage systemImageNamed:@"photo.on.rectangle.angled"] forState:UIControlStateNormal];
     selectButton.tintColor = UIColor.whiteColor;
-    selectButton.accessibilityLabel = @"اختيار صورة واحدة وتشغيل الكاميرا الافتراضية";
+    selectButton.accessibilityLabel = @"الخطوة الأولى: اختيار صورة وتشغيل الكاميرا الافتراضية";
     [selectButton addTarget:self action:@selector(selectVirtualCameraImage) forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:selectButton];
 
@@ -1326,13 +1326,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     rememberRow.layer.cornerRadius = 12.0;
     [card addSubview:rememberRow];
     UILabel *rememberLabel = [[UILabel alloc] initWithFrame:CGRectMake(70, 0, rememberRow.bounds.size.width - 84, 48)];
-    rememberLabel.text = @"حفظ آخر صورة للاستخدام القادم";
+    rememberLabel.text = @"٣. الاحتفاظ بآخر صورة للاستخدام القادم";
     rememberLabel.textAlignment = NSTextAlignmentRight;
     rememberLabel.textColor = [WolFoxProTheme textPrimary];
     rememberLabel.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightSemibold];
     [rememberRow addSubview:rememberLabel];
     _cameraRememberSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(10, 8, 52, 32)];
     _cameraRememberSwitch.onTintColor = [WolFoxProTheme accent];
+    _cameraRememberSwitch.accessibilityLabel = @"الخطوة الثالثة: الاحتفاظ بآخر صورة";
     [_cameraRememberSwitch addTarget:self action:@selector(rememberVirtualCameraChanged:) forControlEvents:UIControlEventValueChanged];
     [rememberRow addSubview:_cameraRememberSwitch];
 
@@ -1342,9 +1343,10 @@ static BOOL WFMasterProcessIsEligible(void) {
     clearButton.layer.cornerRadius = 11.0;
     clearButton.layer.borderWidth = 1.0;
     clearButton.layer.borderColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.55].CGColor;
-    [clearButton setTitle:@"مسح الصورة وإيقاف البث" forState:UIControlStateNormal];
+    [clearButton setTitle:@"٤. حذف الصورة وإيقاف البث" forState:UIControlStateNormal];
     [clearButton setTitleColor:[WolFoxProTheme danger] forState:UIControlStateNormal];
     clearButton.titleLabel.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightBold];
+    clearButton.accessibilityLabel = @"الخطوة الرابعة: حذف الصورة المختارة وإيقاف البث";
     [clearButton addTarget:self action:@selector(clearSpoofedImage) forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:clearButton];
 
@@ -1386,12 +1388,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     if (manager.enabled) {
         _cameraStateLabel.text = @"● البث الافتراضي يعمل الآن";
         _cameraStateLabel.textColor = [WolFoxProTheme success];
-        [_cameraToggleButton setTitle:@"إيقاف البث الافتراضي مؤقتاً" forState:UIControlStateNormal];
+        [_cameraToggleButton setTitle:@"٢. إيقاف البث الافتراضي مؤقتاً" forState:UIControlStateNormal];
+        _cameraToggleButton.accessibilityLabel = @"الخطوة الثانية: إيقاف البث الافتراضي";
         _cameraToggleButton.backgroundColor = [WolFoxProTheme success];
     } else {
         _cameraStateLabel.text = image ? @"○ توجد صورة جاهزة — البث متوقف" : @"○ لم يتم اختيار صورة";
         _cameraStateLabel.textColor = [WolFoxProTheme textSecondary];
-        [_cameraToggleButton setTitle:@"تشغيل البث الافتراضي" forState:UIControlStateNormal];
+        [_cameraToggleButton setTitle:@"٢. تشغيل البث الافتراضي" forState:UIControlStateNormal];
+        _cameraToggleButton.accessibilityLabel = @"الخطوة الثانية: تشغيل البث الافتراضي";
         _cameraToggleButton.backgroundColor = [UIColor colorWithRed:0.16 green:0.24 blue:0.34 alpha:1.0];
     }
 }
@@ -2888,17 +2892,17 @@ static BOOL WFMasterProcessIsEligible(void) {
     themeBtn.frame = CGRectMake(12, 8, themeCard.bounds.size.width - 24, 50);
     themeBtn.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.14];
     themeBtn.layer.cornerRadius = 14;
-    [themeBtn setTitle:(isDark ? @"  الثيم الفاتح" : @"  الثيم الداكن") forState:UIControlStateNormal];
+    [themeBtn setTitle:@"  الوضع الليلي الداكن ثابت" forState:UIControlStateNormal];
     [themeBtn setTitleColor:[WolFoxProTheme accent] forState:UIControlStateNormal];
     themeBtn.titleLabel.font = [WolFoxProTheme fontOfSize:15 weight:UIFontWeightBold];
     if (@available(iOS 13.0, *)) {
         UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:17 weight:UIImageSymbolWeightBold];
-        [themeBtn setImage:[UIImage systemImageNamed:(isDark ? @"sun.max.fill" : @"moon.stars.fill") withConfiguration:cfg] forState:UIControlStateNormal];
+        [themeBtn setImage:[UIImage systemImageNamed:@"moon.stars.fill" withConfiguration:cfg] forState:UIControlStateNormal];
     }
     themeBtn.tintColor = [WolFoxProTheme accent];
     themeBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
-    [themeBtn addTarget:self action:@selector(toggleTheme) forControlEvents:UIControlEventTouchUpInside];
-    themeBtn.accessibilityLabel = @"تغيير ثيم الواجهة";
+    themeBtn.enabled = NO;
+    themeBtn.accessibilityLabel = @"الوضع الليلي الداكن ثابت في هذا الإصدار";
     objc_setAssociatedObject(self, "_theme_btn", themeBtn, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [themeCard addSubview:themeBtn];
     cy += 66 + 18;
@@ -3220,7 +3224,8 @@ static BOOL WFMasterProcessIsEligible(void) {
 }
 
 - (void)toggleTheme {
-    [WolFoxProStore shared].themeIndex = ([WolFoxProStore shared].themeIndex == 0) ? 1 : 0;
+    // الوضع الليلي ثابت في 1.8.4؛ إبقاء الدالة يحافظ على توافق الاستدعاءات القديمة.
+    [WolFoxProStore shared].themeIndex = 0;
     [[WolFoxProStore shared] saveSettings];
 
     // أعد تطبيق الثيم على كل عناصر الـ header و tabs — ليس فقط الـ dashboard
