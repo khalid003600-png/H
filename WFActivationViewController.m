@@ -1,5 +1,9 @@
 // WFActivationViewController.m - WolFox v.1.0.0 "Royal Final"
 #import "WFActivationViewController.h"
+
+#ifndef WOLFOX_LITE
+#define WOLFOX_LITE 0
+#endif
 #import "WFLicenseClient.h"
 #import "WolFoxProTheme.h"
 #import "WFRedactedLogger.h"
@@ -73,7 +77,11 @@
 
     UILabel *titleLabel = [UILabel new];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.text = @"Wolfox";
+#if WOLFOX_LITE
+    titleLabel.text = @"WolFox Lite";
+#else
+    titleLabel.text = @"WolFox Full";
+#endif
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.font = [UIFont systemFontOfSize:19 weight:UIFontWeightBold];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -104,7 +112,11 @@
 
     UILabel *subtitle = [UILabel new];
     subtitle.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitle.text = @"Wolfox";
+#if WOLFOX_LITE
+    subtitle.text = @"WolFox Lite";
+#else
+    subtitle.text = @"WolFox Full";
+#endif
     subtitle.textColor = [WolFoxProTheme textPrimary];
     subtitle.font = [UIFont systemFontOfSize:23 weight:UIFontWeightBlack];
     subtitle.textAlignment = NSTextAlignmentCenter;
@@ -135,7 +147,9 @@
     self.codeField.smartQuotesType = UITextSmartQuotesTypeNo;
     self.codeField.textContentType = UITextContentTypeOneTimeCode;
     self.codeField.textAlignment = NSTextAlignmentCenter;
-    self.codeField.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightBlack];
+    self.codeField.font = [UIFont monospacedSystemFontOfSize:17 weight:UIFontWeightBold];
+    self.codeField.adjustsFontSizeToFitWidth = YES;
+    self.codeField.minimumFontSize = 11.0;
     self.codeField.delegate = self;
     self.codeField.clearButtonMode = UITextFieldViewModeWhileEditing;
     self.codeField.accessibilityLabel = @"كود تفعيل WolFox";
@@ -460,10 +474,12 @@
             self.waitLabel.text = @"تم تفعيل الكود بنجاح";
             self.timerLabel.hidden = YES;
             [self.lockIcon.layer removeAllAnimations];
-            self.lockIcon.image = [UIImage systemImageNamed:@"iphone.circle.fill"];
-            self.lockIcon.tintColor = [UIColor systemGreenColor];
+            self.lockIcon.image = [UIImage systemImageNamed:@"checkmark.shield.fill"];
+            self.lockIcon.tintColor = [WolFoxProTheme success];
             self.statusLabel.textColor = [UIColor colorWithRed:0.45 green:1.0 blue:0.62 alpha:1.0];
-            self.statusLabel.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.16 alpha:0.72];
+            self.statusLabel.backgroundColor = [UIColor colorWithRed:0.04 green:0.25 blue:0.14 alpha:0.82];
+            self.statusLabel.layer.borderColor = [[WolFoxProTheme success] colorWithAlphaComponent:0.78].CGColor;
+            self.statusLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
             self.statusLabel.text = [self successActivationMessage:result];
             self.statusLabel.hidden = NO;
             self.showToolButton.hidden = NO;
@@ -531,7 +547,7 @@
     NSString *plan = result.planName.length ? result.planName : @"غير محددة";
     NSString *started = result.startedAt.length ? result.startedAt : @"غير متوفر";
     NSString *expires = result.expiresAt.length ? result.expiresAt : @"غير متوفر";
-    return [NSString stringWithFormat:@"✅ تم التفعيل بنجاح\nالباقة: %@\nبداية الاشتراك: %@\nنهاية الاشتراك: %@\nالجهاز: مرتبط ومصرّح\nاختر «فتح لوحة WolFox الآن» للمتابعة.", plan, started, expires];
+    return [NSString stringWithFormat:@"تم التفعيل بنجاح\nالباقة: %@\nمن: %@\nإلى: %@\nالجهاز مرتبط ومصرّح", plan, started, expires];
 }
 
 - (UIColor *)statusColorForResult:(WFLicenseResult *)result {
@@ -548,11 +564,13 @@
     self.statusLabel.backgroundColor = deviceRecovery
         ? [UIColor colorWithRed:0.42 green:0.22 blue:0.03 alpha:0.72]
         : [UIColor colorWithRed:0.35 green:0.08 blue:0.10 alpha:0.72];
+    self.statusLabel.layer.borderColor = [(deviceRecovery ? [UIColor systemOrangeColor] : [WolFoxProTheme danger]) colorWithAlphaComponent:0.75].CGColor;
 }
 
 - (void)showActivationError:(NSString *)message {
     self.statusLabel.textColor = [UIColor colorWithRed:1.0 green:0.50 blue:0.50 alpha:1.0];
-    self.statusLabel.backgroundColor = [UIColor colorWithRed:0.35 green:0.08 blue:0.10 alpha:0.72];
+    self.statusLabel.backgroundColor = [UIColor colorWithRed:0.35 green:0.08 blue:0.10 alpha:0.78];
+    self.statusLabel.layer.borderColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.80].CGColor;
     self.statusLabel.text = [NSString stringWithFormat:@"❌ لم يتم التفعيل\n%@\nيمكنك تصحيح الكود والمحاولة مجدداً.", message ?: @"تعذر إكمال التفعيل"];
     self.statusLabel.hidden = NO;
     self.statusLabel.alpha = 0;
