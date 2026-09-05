@@ -1,5 +1,6 @@
 // WFNetworkPairingStore.h - Secure pairing profiles for WolFox 1.8.4
 #import <Foundation/Foundation.h>
+#import <Security/Security.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -32,6 +33,12 @@ typedef NS_ENUM(NSInteger, WFNetworkProfileKind) {
 - (nullable WFNetworkPairingProfile *)profileWithID:(NSString *)profileID;
 - (nullable NSString *)secretForProfileID:(NSString *)profileID
                                     error:(NSError * _Nullable * _Nullable)error;
+/// Validates the leaf certificate against the saved SHA-256 pin. Never bypasses system trust.
+- (BOOL)validateServerTrust:(SecTrustRef)trust
+               forProfileID:(NSString *)profileID
+                      error:(NSError * _Nullable * _Nullable)error;
+/// Profiles eligible for user-authorized automatic reconnection.
+- (NSArray<WFNetworkPairingProfile *> *)automaticReconnectProfiles;
 @end
 
 NS_ASSUME_NONNULL_END
