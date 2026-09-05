@@ -1,4 +1,4 @@
-// WolFoxProTheme.m — v1.8.2 Dark Blue Panel UI
+// WolFoxProTheme.m — v1.8.4 Fixed Dark Blue Panel UI
 // تصميم آمن: خلفيات زرقاء داكنة، أزرق ساطع للتفاعل، وألوان حالة دلالية واضحة.
 // فلسفة التصميم: تباين مرتفع، أسطح كحلية عميقة، وعدم استخدام البنفسجي أو الذهبي في الهوية.
 #import "WolFoxProTheme.h"
@@ -6,8 +6,8 @@
 
 @implementation WolFoxProTheme
 
-// themeIndex: 0 = داكن، 1 = فاتح
-+ (BOOL)isDark { return [WolFoxProStore shared].themeIndex == 0; }
+// الإصدار 1.8.4 يثبت الوضع الليلي لتوحيد التباين ومنع تبدل الألوان بين الصفحات.
++ (BOOL)isDark { return YES; }
 
 + (UIColor *)windowBackground { return [self royalBackground]; }
 
