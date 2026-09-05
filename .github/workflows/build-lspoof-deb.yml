@@ -49,6 +49,11 @@ jobs:
               text = text.replace(needle, '\tSource/PersistenceManager.m \\\n\tSource/FGWActivationViewController.m')
           makefile.write_text(text)
 
+          activation = Path('.ci-lspoof/Source/FGWActivationViewController.m')
+          text = activation.read_text()
+          text = text.replace('NSURLResponse *response, NSError *error', 'NSURLResponse *__unused response, NSError *error')
+          activation.write_text(text)
+
           picker = Path('.ci-lspoof/Source/MapPickerViewController.m')
           text = picker.read_text()
           if '#import "FGWActivationViewController.h"' not in text:
