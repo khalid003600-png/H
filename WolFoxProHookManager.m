@@ -305,20 +305,21 @@ char WFSpoofedLocationAssociationKey = 0;
     if (!_routeWaypoints) {
         CLLocationCoordinate2D current = store.currentFakeCoords;
         CLLocationCoordinate2D target  = store.targetRouteCoords;
-        double speedKmPerSec = store.simSpeed / 3600.0;
-        double step = speedKmPerSec / 111.1;
-        double dLat = target.latitude  - current.latitude;
-        double dLon = target.longitude - current.longitude;
-        double dist = sqrt(dLat*dLat + dLon*dLon);
-        if (dist < step || dist < 1e-9) {
-            // BUG FIX: وصلنا للهدف — أوقف الـ timer وأرسل WF_ROUTE_FINISHED
+        CLLocation *currentLocation = [[CLLocation alloc] initWithLatitude:current.latitude longitude:current.longitude];
+        CLLocation *targetLocation = [[CLLocation alloc] initWithLatitude:target.latitude longitude:target.longitude];
+        CLLocationDistance distanceMeters = [currentLocation distanceFromLocation:targetLocation];
+        NSTimeInterval interval = WFClampGPSUpdateInterval(store.updateIntervalSeconds);
+        CLLocationDistance stepMeters = MAX(0.1, (store.simSpeed / 3.6) * interval);
+        if (distanceMeters <= stepMeters || distanceMeters < 0.01) {
+            // وصلنا للهدف — أوقف الـ timer وأرسل WF_ROUTE_FINISHED.
             store.currentFakeCoords = target;
             [self deliverFakeUpdate];
-            [self stopRoute]; // يُوقف timer ويضع routeActive=NO ويحفظ
+            [self stopRoute];
             [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_ROUTE_FINISHED" object:nil];
         } else {
-            current.latitude  += (dLat / dist) * step;
-            current.longitude += (dLon / dist) * step;
+            double fraction = MIN(1.0, stepMeters / distanceMeters);
+            current.latitude += (target.latitude - current.latitude) * fraction;
+            current.longitude += (target.longitude - current.longitude) * fraction;
             store.currentFakeCoords = current;
             [self deliverFakeUpdate];
             [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_ROUTE_STEP_UPDATED" object:nil];
@@ -336,21 +337,19 @@ char WFSpoofedLocationAssociationKey = 0;
     objc_setAssociatedObject(current, &WFSpoofedLocationAssociationKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     CLLocation *target  = _routeWaypoints[_waypointIndex + 1];
 
-    double speedKmPerSec = _routeSpeedKmh / 3600.0;
-    double stepDeg = speedKmPerSec / 111.1;
+    CLLocationDistance distanceMeters = [current distanceFromLocation:target];
+    NSTimeInterval interval = WFClampGPSUpdateInterval(store.updateIntervalSeconds);
+    CLLocationDistance stepMeters = MAX(0.1, (_routeSpeedKmh / 3.6) * interval);
 
-    double dLat = target.coordinate.latitude  - current.coordinate.latitude;
-    double dLon = target.coordinate.longitude - current.coordinate.longitude;
-    double dist  = sqrt(dLat*dLat + dLon*dLon);
-
-    if (dist <= stepDeg || dist < 1e-9) {
-        // Reached this waypoint, move to next
+    if (distanceMeters <= stepMeters || distanceMeters < 0.01) {
+        // Reached this waypoint, move to next.
         store.currentFakeCoords = target.coordinate;
         _waypointIndex++;
     } else {
+        double fraction = MIN(1.0, stepMeters / distanceMeters);
         CLLocationCoordinate2D next;
-        next.latitude  = current.coordinate.latitude  + (dLat / dist) * stepDeg;
-        next.longitude = current.coordinate.longitude + (dLon / dist) * stepDeg;
+        next.latitude = current.coordinate.latitude + (target.coordinate.latitude - current.coordinate.latitude) * fraction;
+        next.longitude = current.coordinate.longitude + (target.coordinate.longitude - current.coordinate.longitude) * fraction;
         store.currentFakeCoords = next;
     }
 

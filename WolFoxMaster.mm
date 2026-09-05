@@ -1,4 +1,8 @@
 #import "WFRedactedLogger.h"
+
+#ifndef WOLFOX_LITE
+#define WOLFOX_LITE 0
+#endif
 // WolFoxMaster.mm - WolFox v1.8.2 Full "Dark Blue Panel UI"
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -15,6 +19,7 @@
 #import "WolFoxProHookManager.h"
 #import "WolFoxProCellModel.h"
 #import "WFLicenseClient.h"
+#import "WFLicenseConfig.h"
 #import "WFActivationViewController.h"
 #import "WFSpoofScheduleManager.h"
 #import "WFHookDefaults.h"
@@ -268,6 +273,15 @@ static BOOL WFMasterProcessIsEligible(void) {
     _onboardingOverlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.76];
     [self.view addSubview:_onboardingOverlay];
 
+#if WOLFOX_LITE
+    NSArray<NSString *> *titles = @[@"مرحباً بك في WolFox Lite", @"الموقع والمفضلة", @"الإعدادات والإخفاء"];
+    NSArray<NSString *> *messages = @[
+        @"هذه جولة إرشادية قصيرة لشرح وظائف نسخة Lite. يمكنك الضغط على تخطي في أي وقت.",
+        @"استخدم الخريطة والبحث والإحداثيات والمفضلة لتحديد الموقع وتشغيل الوظائف المرتبطة به.",
+        @"من الإعدادات راجع حالة الاشتراك، تحكم في الإخفاء، وتحقق من إصدار WolFox Lite."
+    ];
+    NSString *onboardingEdition = @"WOLFOX LITE";
+#else
     NSArray<NSString *> *titles = @[@"مرحباً بك في WolFox Full", @"الخريطة", @"الكاميرا الافتراضية", @"المفضلة والجدولة", @"الإخفاء والواجهة العائمة", @"الإعدادات والاشتراك"];
     NSArray<NSString *> *messages = @[
         @"هذه جولة إرشادية قصيرة لشرح أهم وظائف النسخة الكاملة. يمكنك الضغط على تخطي في أي وقت.",
@@ -277,6 +291,8 @@ static BOOL WFMasterProcessIsEligible(void) {
         @"بعد فتح كاميرا التطبيق اضغط مطولاً في منتصف الشاشة لإظهار الأيقونة؛ اسحبها لأكثر من ثانيتين للتبديل السريع.",
         @"من الإعدادات غيّر المظهر والألوان والتنبيهات، وراجع حالة الاشتراك وإصدار WolFox Full."
     ];
+    NSString *onboardingEdition = @"WOLFOX FULL";
+#endif
     NSInteger step = MIN(_onboardingStep, (NSInteger)titles.count - 1);
     CGFloat width = self.view.bounds.size.width - 32.0;
     CGFloat height = 190.0;
@@ -289,7 +305,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [_onboardingOverlay addSubview:card];
 
     UILabel *counter = [[UILabel alloc] initWithFrame:CGRectMake(18, 12, width - 36, 18)];
-    counter.text = [NSString stringWithFormat:@"WOLFOX FULL  •  %ld / %lu", (long)step + 1, (unsigned long)titles.count];
+    counter.text = [NSString stringWithFormat:@"%@  •  %ld / %lu", onboardingEdition, (long)step + 1, (unsigned long)titles.count];
     counter.textColor = [WolFoxProTheme accent];
     counter.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightBlack];
     counter.textAlignment = NSTextAlignmentRight;
@@ -355,7 +371,11 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.view addSubview:_header];
     
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(18, safeTop + 7, 135, 26)];
-    _titleLabel.text = @"Wolfox";
+#if WOLFOX_LITE
+    _titleLabel.text = @"WolFox Lite";
+#else
+    _titleLabel.text = @"WolFox Full";
+#endif
     _titleLabel.textAlignment = NSTextAlignmentLeft;
     _titleLabel.font = [WolFoxProTheme fontOfSize:20 weight:UIFontWeightBlack];
     _titleLabel.textColor = [WolFoxProTheme textPrimary];
@@ -385,13 +405,24 @@ static BOOL WFMasterProcessIsEligible(void) {
     _tabsBar.layer.borderColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.18].CGColor;
     [self.view addSubview:_tabsBar];
     
+#if WOLFOX_LITE
+    UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 2.0, 4)];
+#else
     UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 5.0, 4)];
+#endif
     indicator.backgroundColor = [WolFoxProTheme accent];
     objc_setAssociatedObject(self, "_tab_indicator", indicator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [_tabsBar addSubview:indicator];
     
+#if WOLFOX_LITE
+    NSArray *icons = @[@"location.fill", @"gearshape.fill"];
+    NSArray *tabLabels = @[@"الموقع والمفضلة", @"الإعدادات والإخفاء"];
+    NSArray *tabPages = @[@0, @4];
+#else
     NSArray *icons = @[@"location.fill", @"person.text.rectangle.fill", @"antenna.radiowaves.left.and.right", @"camera.fill", @"gearshape.fill"];
     NSArray *tabLabels = @[@"الموقع GPS", @"معرف الجهاز", @"البلوتوث", @"الكاميرا", @"الإعدادات"];
+    NSArray *tabPages = @[@0, @1, @2, @3, @4];
+#endif
     CGFloat tw = w / icons.count;
     UIImageSymbolConfiguration *tabConfig = nil;
     if (@available(iOS 13.0, *)) {
@@ -405,7 +436,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         }
         b.tintColor = [UIColor whiteColor];
         b.adjustsImageWhenHighlighted = NO;
-        b.tag = i;
+        b.tag = [tabPages[i] integerValue];
         b.accessibilityLabel = tabLabels[i];
         b.accessibilityHint = @"يفتح هذا القسم";
         [b addTarget:self action:@selector(tabBtnPressed:) forControlEvents:UIControlEventTouchUpInside];
@@ -506,7 +537,11 @@ static BOOL WFMasterProcessIsEligible(void) {
 
 - (void)refreshSpoofHeaderStatus {
     WolFoxProStore *store = [WolFoxProStore shared];
+#if WOLFOX_LITE
+    BOOL active = store.spoofActive;
+#else
     BOOL active = store.spoofActive || store.bluetoothActive || store.mediaUploadActive || [store validatedActiveIdentifier] != nil;
+#endif
     _spoofStatusLabel.text = active ? @"● نشط • التزييف مفعّل" : @"○ متوقف • الوضع الحقيقي";
     _spoofStatusLabel.textColor = active ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
     _spoofStatusLabel.accessibilityLabel = active ? @"حالة التزييف: نشط" : @"حالة التزييف: متوقف";
@@ -529,9 +564,13 @@ static BOOL WFMasterProcessIsEligible(void) {
         for (UIView *v in _tabsBar.subviews) { if (v.frame.size.height == 3) { indicator = v; break; } }
     }
 
-    // Full يعرض خمسة أقسام فعلية؛ يحسب المؤشر والتحديد من عدد الأزرار الحقيقي.
+    // يحسب موضع المؤشر من الزر الفعلي؛ يدعم Full بخمسة أقسام وLite بقسمين.
     CGFloat tabCount = MAX((CGFloat)_tabBtns.count, 1.0);
-    NSInteger tabIndex = MIN(MAX(page, 0), (NSInteger)_tabBtns.count - 1);
+    NSInteger tabIndex = 0;
+    for (NSUInteger index = 0; index < _tabBtns.count; index++) {
+        UIButton *candidate = (UIButton *)_tabBtns[index];
+        if (candidate.tag == page) { tabIndex = (NSInteger)index; break; }
+    }
     CGFloat tw = w / tabCount;
     if (indicator) {
         [UIView performWithoutAnimation:^{
@@ -539,8 +578,8 @@ static BOOL WFMasterProcessIsEligible(void) {
         }];
     }
     for (UIButton *b in _tabBtns) {
-        b.tintColor = (b.tag == tabIndex) ? [WolFoxProTheme accent] : [UIColor whiteColor];
-        b.accessibilityTraits = (b.tag == tabIndex) ? UIAccessibilityTraitSelected : UIAccessibilityTraitNone;
+        b.tintColor = (b.tag == page) ? [WolFoxProTheme accent] : [UIColor whiteColor];
+        b.accessibilityTraits = (b.tag == page) ? UIAccessibilityTraitSelected : UIAccessibilityTraitNone;
     }
 
     for (UIView *v in _scrollDashboard.subviews) [v removeFromSuperview];
@@ -855,13 +894,15 @@ static BOOL WFMasterProcessIsEligible(void) {
     }];
     [ac addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
     [ac addAction:[UIAlertAction actionWithTitle:@"حفظ" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){
-        NSString *name = ac.textFields[0].text;
-        NSString *uuid = ac.textFields[1].text;
+        NSString *name = [ac.textFields[0].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSString *uuid = [[ac.textFields[1].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
         if (name.length == 0) { [self showToast:@"❌ الاسم مطلوب"]; return; }
+        NSUUID *validatedUUID = uuid.length ? [[NSUUID alloc] initWithUUIDString:uuid] : [NSUUID UUID];
+        if (!validatedUUID) { [self showToast:@"❌ صيغة UUID غير صحيحة"]; return; }
         WolFoxBleProfile *p = [WolFoxBleProfile new];
         p.profileID = [[NSUUID UUID] UUIDString];
         p.name      = name;
-        p.uuid      = uuid.length > 0 ? uuid : [[NSUUID UUID] UUIDString];
+        p.uuid      = validatedUUID.UUIDString;
         p.localName = name;
         p.rssi      = -60;
         [[WolFoxProStore shared] saveBleProfile:p];
@@ -1302,12 +1343,12 @@ static BOOL WFMasterProcessIsEligible(void) {
     selectButton.frame = CGRectMake(18, 226, card.bounds.size.width - 36, 44);
     selectButton.backgroundColor = [WolFoxProTheme accent];
     selectButton.layer.cornerRadius = 12.0;
-    [selectButton setTitle:@"اختيار صورة وتشغيلها" forState:UIControlStateNormal];
+    [selectButton setTitle:@"١. اختيار صورة وتشغيل البث" forState:UIControlStateNormal];
     [selectButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     selectButton.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
     if (@available(iOS 13.0, *)) [selectButton setImage:[UIImage systemImageNamed:@"photo.on.rectangle.angled"] forState:UIControlStateNormal];
     selectButton.tintColor = UIColor.whiteColor;
-    selectButton.accessibilityLabel = @"اختيار صورة واحدة وتشغيل الكاميرا الافتراضية";
+    selectButton.accessibilityLabel = @"الخطوة الأولى: اختيار صورة وتشغيل الكاميرا الافتراضية";
     [selectButton addTarget:self action:@selector(selectVirtualCameraImage) forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:selectButton];
 
@@ -1324,13 +1365,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     rememberRow.layer.cornerRadius = 12.0;
     [card addSubview:rememberRow];
     UILabel *rememberLabel = [[UILabel alloc] initWithFrame:CGRectMake(70, 0, rememberRow.bounds.size.width - 84, 48)];
-    rememberLabel.text = @"حفظ آخر صورة للاستخدام القادم";
+    rememberLabel.text = @"٣. الاحتفاظ بآخر صورة للاستخدام القادم";
     rememberLabel.textAlignment = NSTextAlignmentRight;
     rememberLabel.textColor = [WolFoxProTheme textPrimary];
     rememberLabel.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightSemibold];
     [rememberRow addSubview:rememberLabel];
     _cameraRememberSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(10, 8, 52, 32)];
     _cameraRememberSwitch.onTintColor = [WolFoxProTheme accent];
+    _cameraRememberSwitch.accessibilityLabel = @"الخطوة الثالثة: الاحتفاظ بآخر صورة";
     [_cameraRememberSwitch addTarget:self action:@selector(rememberVirtualCameraChanged:) forControlEvents:UIControlEventValueChanged];
     [rememberRow addSubview:_cameraRememberSwitch];
 
@@ -1340,9 +1382,10 @@ static BOOL WFMasterProcessIsEligible(void) {
     clearButton.layer.cornerRadius = 11.0;
     clearButton.layer.borderWidth = 1.0;
     clearButton.layer.borderColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.55].CGColor;
-    [clearButton setTitle:@"مسح الصورة وإيقاف البث" forState:UIControlStateNormal];
+    [clearButton setTitle:@"٤. حذف الصورة وإيقاف البث" forState:UIControlStateNormal];
     [clearButton setTitleColor:[WolFoxProTheme danger] forState:UIControlStateNormal];
     clearButton.titleLabel.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightBold];
+    clearButton.accessibilityLabel = @"الخطوة الرابعة: حذف الصورة المختارة وإيقاف البث";
     [clearButton addTarget:self action:@selector(clearSpoofedImage) forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:clearButton];
 
@@ -1384,12 +1427,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     if (manager.enabled) {
         _cameraStateLabel.text = @"● البث الافتراضي يعمل الآن";
         _cameraStateLabel.textColor = [WolFoxProTheme success];
-        [_cameraToggleButton setTitle:@"إيقاف البث الافتراضي مؤقتاً" forState:UIControlStateNormal];
+        [_cameraToggleButton setTitle:@"٢. إيقاف البث الافتراضي مؤقتاً" forState:UIControlStateNormal];
+        _cameraToggleButton.accessibilityLabel = @"الخطوة الثانية: إيقاف البث الافتراضي";
         _cameraToggleButton.backgroundColor = [WolFoxProTheme success];
     } else {
         _cameraStateLabel.text = image ? @"○ توجد صورة جاهزة — البث متوقف" : @"○ لم يتم اختيار صورة";
         _cameraStateLabel.textColor = [WolFoxProTheme textSecondary];
-        [_cameraToggleButton setTitle:@"تشغيل البث الافتراضي" forState:UIControlStateNormal];
+        [_cameraToggleButton setTitle:@"٢. تشغيل البث الافتراضي" forState:UIControlStateNormal];
+        _cameraToggleButton.accessibilityLabel = @"الخطوة الثانية: تشغيل البث الافتراضي";
         _cameraToggleButton.backgroundColor = [UIColor colorWithRed:0.16 green:0.24 blue:0.34 alpha:1.0];
     }
 }
@@ -2886,17 +2931,17 @@ static BOOL WFMasterProcessIsEligible(void) {
     themeBtn.frame = CGRectMake(12, 8, themeCard.bounds.size.width - 24, 50);
     themeBtn.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.14];
     themeBtn.layer.cornerRadius = 14;
-    [themeBtn setTitle:(isDark ? @"  الثيم الفاتح" : @"  الثيم الداكن") forState:UIControlStateNormal];
+    [themeBtn setTitle:@"  الوضع الليلي الداكن ثابت" forState:UIControlStateNormal];
     [themeBtn setTitleColor:[WolFoxProTheme accent] forState:UIControlStateNormal];
     themeBtn.titleLabel.font = [WolFoxProTheme fontOfSize:15 weight:UIFontWeightBold];
     if (@available(iOS 13.0, *)) {
         UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:17 weight:UIImageSymbolWeightBold];
-        [themeBtn setImage:[UIImage systemImageNamed:(isDark ? @"sun.max.fill" : @"moon.stars.fill") withConfiguration:cfg] forState:UIControlStateNormal];
+        [themeBtn setImage:[UIImage systemImageNamed:@"moon.stars.fill" withConfiguration:cfg] forState:UIControlStateNormal];
     }
     themeBtn.tintColor = [WolFoxProTheme accent];
     themeBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
-    [themeBtn addTarget:self action:@selector(toggleTheme) forControlEvents:UIControlEventTouchUpInside];
-    themeBtn.accessibilityLabel = @"تغيير ثيم الواجهة";
+    themeBtn.enabled = NO;
+    themeBtn.accessibilityLabel = @"الوضع الليلي الداكن ثابت في هذا الإصدار";
     objc_setAssociatedObject(self, "_theme_btn", themeBtn, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [themeCard addSubview:themeBtn];
     cy += 66 + 18;
@@ -3021,7 +3066,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     logoutBtn.tintColor = [UIColor whiteColor];
     logoutBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
     [logoutBtn addTarget:self action:@selector(logoutPressed) forControlEvents:UIControlEventTouchUpInside];
-    logoutBtn.accessibilityLabel = @"تسجيل الخروج وحذف الترخيص";
+    logoutBtn.accessibilityLabel = @"إيقاف الأداة مع الاحتفاظ بكود التفعيل";
     [logoutCard addSubview:logoutBtn];
     cy += 66 + 20;
 
@@ -3137,18 +3182,27 @@ static BOOL WFMasterProcessIsEligible(void) {
     NSString *deviceShort = [WFLicenseClient deviceIdentifier];
     if (deviceShort.length > 8) deviceShort = [deviceShort substringToIndex:8];
     NSString *code = [WFLicenseClient storedCode] ?: @"—";
-    NSString *status = info.success ? @"✅ نشط" : @"❌ غير نشط";
+    NSString *maskedCode = code;
+    if (code.length > 12) {
+        maskedCode = [NSString stringWithFormat:@"%@••••%@", [code substringToIndex:8], [code substringFromIndex:code.length - 4]];
+    }
+    NSString *rawVersion = [WF_APP_VERSION stringByReplacingOccurrencesOfString:@"-Full" withString:@""];
+    rawVersion = [rawVersion stringByReplacingOccurrencesOfString:@"-Lite" withString:@""];
+    BOOL isLiteEdition = [WF_APP_VERSION hasSuffix:@"-Lite"];
+    NSString *editionName = isLiteEdition ? @"Lite" : @"Full";
+    NSString *displayVersion = [NSString stringWithFormat:@"WolFox %@ v%@", editionName, rawVersion];
+    NSString *status = info.success ? @"نشط وآمن ✓" : @"غير نشط";
     [self showPopupWithTitle:@"معلومات الاشتراك" icon:@"crown.fill" content:^{
-        CGFloat contentWidth = MIN(300.0, self.view.bounds.size.width - 80.0);
+        CGFloat contentWidth = MIN(330.0, self.view.bounds.size.width - 64.0);
         UIView *v = [[UIView alloc] initWithFrame:CGRectMake(0, 0, contentWidth, 436)];
         [self addInfoRow:v t:@"الحالة" v:status y:0];
-        [self addInfoRow:v t:@"إصدار النسخة" v:@"WolFox Full v1.8.2" y:72];
-        [self addInfoRow:v t:@"نوع الباقة" v:info.planName ?: @"تجريبي" y:144];
+        [self addInfoRow:v t:@"الإصدار" v:displayVersion y:72];
+        [self addInfoRow:v t:@"الباقة" v:info.planName ?: @"غير محددة" y:144];
         [self addInfoRow:v t:@"تاريخ الانتهاء" v:info.expiresAt ?: @"غير متوفر" y:216];
-        [self addInfoRow:v t:@"كود التفعيل" v:code y:288];
+        [self addInfoRow:v t:@"كود التفعيل المحمي" v:maskedCode y:288];
         [self addInfoRow:v t:@"معرّف الجهاز" v:deviceShort y:360];
         return v;
-    } btnTitle:@"موافق" btnColor:[WolFoxProTheme accent]];
+    } btnTitle:@"إغلاق" btnColor:[WolFoxProTheme accent]];
 }
 
 - (void)addInfoRow:(UIView *)p t:(NSString *)t v:(NSString *)v y:(CGFloat)y {
@@ -3163,18 +3217,18 @@ static BOOL WFMasterProcessIsEligible(void) {
 // activateCodePressed removed - activation handled by WFActivationViewController
 
 - (void)logoutPressed {
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"تسجيل الخروج" message:@"هل أنت متأكد من رغبتك في حذف الترخيص من هذا الجهاز؟" preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"إيقاف الأداة" message:@"سيتم إيقاف GPS والكاميرا والبلوتوث مع الاحتفاظ بكود التفعيل على هذا الجهاز." preferredStyle:UIAlertControllerStyleAlert];
     [ac addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"نعم، حذف" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a){
-        [WFLicenseClient clearStoredLicense];
-        [WolFoxProStore shared].spoofActive = NO;
-        [WolFoxProStore shared].scheduleApplied = NO;
-        [[WolFoxProStore shared] saveSettings];
+    [ac addAction:[UIAlertAction actionWithTitle:@"إيقاف الآن" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action){
+        WolFoxProStore *store = [WolFoxProStore shared];
         [[WolFoxProHookManager shared] stopRoute];
-        // أغلق الـ UI وأظهر شاشة التفعيل بدلاً من exit() الذي يقتل العملية بلا تنظيف
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [[WolFoxController shared] showActivationScreenWithResult:nil];
-        });
+        [WFVirtualCameraManager shared].enabled = NO;
+        store.spoofActive = NO;
+        store.bluetoothActive = NO;
+        store.scheduleApplied = NO;
+        [store saveSettings];
+        [self refreshSpoofHeaderStatus];
+        [self showToast:@"تم إيقاف الأداة مع الاحتفاظ بكود التفعيل"];
     }]];
     [self presentViewController:ac animated:YES completion:nil];
 }
@@ -3218,7 +3272,8 @@ static BOOL WFMasterProcessIsEligible(void) {
 }
 
 - (void)toggleTheme {
-    [WolFoxProStore shared].themeIndex = ([WolFoxProStore shared].themeIndex == 0) ? 1 : 0;
+    // الوضع الليلي ثابت في 1.8.4؛ إبقاء الدالة يحافظ على توافق الاستدعاءات القديمة.
+    [WolFoxProStore shared].themeIndex = 0;
     [[WolFoxProStore shared] saveSettings];
 
     // أعد تطبيق الثيم على كل عناصر الـ header و tabs — ليس فقط الـ dashboard
@@ -3457,9 +3512,12 @@ static BOOL WFMasterProcessIsEligible(void) {
             CLLocationCoordinate2D current = [WolFoxProStore shared].currentFakeCoords;
             CLLocationCoordinate2D target = [WolFoxProStore shared].targetRouteCoords;
             // FIX: نفس حساب البearing الجغرافي الصحيح
-            double dLat = target.latitude  - current.latitude;
-            double dLon = target.longitude - current.longitude;
-            CGFloat bearing = (CGFloat)atan2(dLon, dLat);
+            double lat1 = current.latitude * M_PI / 180.0;
+            double lat2 = target.latitude * M_PI / 180.0;
+            double dLon = (target.longitude - current.longitude) * M_PI / 180.0;
+            double y = sin(dLon) * cos(lat2);
+            double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+            CGFloat bearing = (CGFloat)atan2(y, x);
             marker.transform = CGAffineTransformMakeRotation(bearing);
         } else {
             marker.transform = CGAffineTransformIdentity;

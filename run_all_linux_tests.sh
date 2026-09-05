@@ -5,9 +5,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 run_test() {
     local test_file="$1"
-    if [ -x "$PROJECT_DIR/$test_file" ]; then
+    if [ -f "$PROJECT_DIR/$test_file" ]; then
         echo "=== $test_file ==="
-        "$PROJECT_DIR/$test_file"
+        bash "$PROJECT_DIR/$test_file"
     else
         echo "ℹ️  تم تخطي $test_file: الملف غير موجود في مصدر Full الحالي."
     fi
@@ -20,6 +20,13 @@ run_test "test_schedule_static.sh"
 run_test "test_license_recovery_static.sh"
 run_test "test_identifier_hooks_static.sh"
 run_test "test_virtual_camera_static.sh"
+run_test "test_v183_developments_static.sh"
+run_test "test_network_pairing_security_static.sh"
+run_test "test_camera_dark_ui_static.sh"
+run_test "test_activation_ui_static.sh"
+run_test "test_lite_edition_static.sh"
+run_test "test_ui_edition_consistency_static.sh"
+run_test "test_small_screen_ui_static.sh"
 run_test "run_linux_virtual_camera_tests.sh"
 run_test "run_linux_identifier_tests.sh"
 run_test "run_linux_location_tests.sh"

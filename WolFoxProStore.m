@@ -179,7 +179,9 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         self.jitterActive = [u boolForKey:@"WF_PRO_JITTER_ACT"];
     }
     self.volumeGestureEnabled = [u objectForKey:@"WF_PRO_VOLUME_GESTURE"] == nil ? YES : [u boolForKey:@"WF_PRO_VOLUME_GESTURE"];
-    self.themeIndex = [u integerForKey:@"WF_PRO_THEME_IDX"];
+    // v1.8.4: تثبيت الوضع الليلي الداكن وترحيل أي اختيار فاتح سابق.
+    self.themeIndex = 0;
+    [u setInteger:0 forKey:@"WF_PRO_THEME_IDX"];
     self.mapStyle = [u integerForKey:@"WF_PRO_MAP_STYLE"];
     double savedSpeed = [u objectForKey:@"WF_PRO_SIM_SPEED"] ? [u doubleForKey:@"WF_PRO_SIM_SPEED"] : WFDefaultSimulationSpeedKmh;
     self.simSpeed = WFClampSimulationSpeed(savedSpeed);

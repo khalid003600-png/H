@@ -6,10 +6,20 @@ umask 077
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
-# WolFox v1.8.2 Full Dark Blue Panel UI build
+# Shared Full/Lite build. Full remains the default for backward compatibility.
 # Runtime target: iOS 15.8 through iOS 26.5
 # Build SDK: iPhoneOS 16.5. يظل Deployment Target عند iOS 15.8.
-VERSION="1.8.2-Full"
+WOLFOX_EDITION="${WOLFOX_EDITION:-Full}"
+VERSION="${WOLFOX_VERSION:-1.8.6-Full}"
+if [ "$WOLFOX_EDITION" = "Lite" ]; then
+    PRODUCT_NAME="WolFoxLite"
+    PACKAGE_ID="com.wolfox.gpspro.lite"
+    PACKAGE_TITLE="WolFox Lite"
+else
+    PRODUCT_NAME="WolFox"
+    PACKAGE_ID="com.wolfox.gpspro"
+    PACKAGE_TITLE="WolFox"
+fi
 # Clang يقبل X.Y فقط كـ deployment target — نستخدم 15.0 بدلاً من 15.8
 # الكود نفسه يعمل على 15.8 لأنه لا يستخدم أي API فوق iOS 15.0
 MIN_IOS="${MIN_IOS:-15.0}"
@@ -24,7 +34,7 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 SDK_PATH="${SDKROOT:-${SDK_PATH:-$THEOS/sdks/iPhoneOS${REQUIRED_SDK_VERSION}.sdk}}"
 THEOS_INC="$THEOS/include"
 BUILD_DIR="$PROJECT_DIR/.wolfox-build"
-OUTPUT_DYLIB="$PROJECT_DIR/WolFox.dylib"
+OUTPUT_DYLIB="$PROJECT_DIR/$PRODUCT_NAME.dylib"
 WOLFOX_ARCHS="${WOLFOX_ARCHS:-arm64}"
 GENERATED_LICENSE_CONFIG="$BUILD_DIR/WFLicenseGeneratedConfig.h"
 
@@ -141,6 +151,7 @@ fi
 
 FILES=(
     "WFRedactedLogger.m"
+    "WFNetworkPairingStore.m"
     "WFVirtualCameraManager.mm"
     "WolFoxProCellModel.m"
     "WolFoxProTheme.m"
@@ -205,7 +216,7 @@ BASE_LINK_FLAGS=(
     -isysroot "$SDK_PATH"
     -miphoneos-version-min="$MIN_IOS"
     -dynamiclib
-    -install_name "@rpath/WolFox.dylib"
+    -install_name "@rpath/$PRODUCT_NAME.dylib"
     -Wl,-ObjC
     -Wl,-undefined,dynamic_lookup
     -framework UIKit
@@ -226,6 +237,9 @@ BASE_LINK_FLAGS=(
     -lsqlite3
 )
 LINK_FLAGS=("${BASE_LINK_FLAGS[@]}")
+if [ "$WOLFOX_EDITION" = "Lite" ]; then
+    COMMON_FLAGS+=(-DWOLFOX_LITE=1)
+fi
 
 # تقوية آمنة للإصدار النهائي دون تغيير أسماء كلاسات Objective-C أو selectors
 # التي تعتمد عليها الهوكات وقت التشغيل. يمكن تعطيلها فقط للتشخيص عبر:
@@ -302,6 +316,7 @@ PROJECT_BUNDLE_ID_ESCAPED="$(escape_objc_string "$PROJECT_BUNDLE_ID_VALUE")"
     printf '#define WF_PANEL_BASE_URL @"%s"\n' "$PANEL_BASE_URL_ESCAPED"
     printf '#define WF_PROJECT_KEY @"%s"\n' "$PROJECT_KEY_ESCAPED"
     printf '#define WF_PROJECT_BUNDLE_ID @"%s"\n' "$PROJECT_BUNDLE_ID_ESCAPED"
+    printf '#define WF_TWEAK_VERSION @"%s"\n' "$VERSION"
 } > "$GENERATED_LICENSE_CONFIG"
 chmod 0600 "$GENERATED_LICENSE_CONFIG"
 
@@ -331,7 +346,7 @@ make_package() {
     # إلى أذونات قراءة/عبور قياسية بعد التثبيت. تبقى ملفات البناء خارج الحزمة تحت umask المقيد.
     chmod 0755 "$package_dir" "$package_dir/DEBIAN"
     chmod 0755 "$tweak_dir" "$(dirname "$tweak_dir")" "$(dirname "$(dirname "$tweak_dir")")" "$(dirname "$(dirname "$(dirname "$tweak_dir")")")" "$(dirname "$(dirname "$(dirname "$(dirname "$tweak_dir")")")")"
-    install -m 0755 "$OUTPUT_DYLIB" "$tweak_dir/WolFox.dylib"
+    install -m 0755 "$OUTPUT_DYLIB" "$tweak_dir/$PRODUCT_NAME.dylib"
 
     {
         echo "{"
@@ -343,15 +358,15 @@ make_package() {
         echo "        );"
         echo "    };"
         echo "}"
-    } > "$tweak_dir/WolFox.plist"
-    chmod 0644 "$tweak_dir/WolFox.plist"
+    } > "$tweak_dir/$PRODUCT_NAME.plist"
+    chmod 0644 "$tweak_dir/$PRODUCT_NAME.plist"
 
     cat > "$package_dir/DEBIAN/control" <<CTRL
-Package: com.wolfox.gpspro
-Name: WolFox
+Package: $PACKAGE_ID
+Name: $PACKAGE_TITLE
 Version: $VERSION
 Architecture: $architecture
-Description: WolFox iOS 15.8-26.5 arm64 — GPS/ID/Camera/Bluetooth tools with License Hub.
+Description: $PACKAGE_TITLE iOS 15.8-26.5 arm64 — shared-source licensed edition.
 Author: WolFox
 Maintainer: WolFox
 Section: Tweaks
@@ -374,8 +389,8 @@ POSTINST
     "$DPKG_DEB" "${DPKG_BUILD_FLAGS[@]}" -b "$package_dir" "$output"
 }
 
-ROOTFUL_DEB="$PROJECT_DIR/WolFox_v${VERSION}_iOS15.8-26.5_Rootful.deb"
-ROOTLESS_DEB="$PROJECT_DIR/WolFox_v${VERSION}_iOS15.8-26.5_Rootless.deb"
+ROOTFUL_DEB="$PROJECT_DIR/${PRODUCT_NAME}_v${VERSION}_iOS15.8-26.5_Rootful.deb"
+ROOTLESS_DEB="$PROJECT_DIR/${PRODUCT_NAME}_v${VERSION}_iOS15.8-26.5_Rootless.deb"
 
 make_package rootful "" "iphoneos-arm64" "$ROOTFUL_DEB"
 make_package rootless "/var/jb" "iphoneos-arm64" "$ROOTLESS_DEB"

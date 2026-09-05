@@ -1,14 +1,12 @@
-name: Build WolFox Full 1.8.6
+name: Build WolFox Lite 1.8.6
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
       bundle_ids:
-        description: "Bundle IDs مفصولة بفاصلة (اختياري)"
+        description: "Bundle IDs مفصولة بفاصلة"
         required: false
         default: "sa.gov.moia.mosques-2"
 
@@ -16,12 +14,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: wolfox-build-${{ github.workflow }}-${{ github.ref }}
+  group: wolfox-lite-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test-and-build:
-    name: Linux tests and iOS arm64 packages
+  test-and-build-lite:
+    name: Lite Linux tests and iOS arm64 packages
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -29,31 +27,33 @@ jobs:
       WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
       WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
       WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
+      WOLFOX_EDITION: Lite
+      WOLFOX_VERSION: 1.8.6-Lite
+
     steps:
       - uses: actions/checkout@v4
       - name: Install compatibility-check dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ripgrep
-      - name: Run compatibility checks
+      - name: Run Full and Lite safety checks
         run: |
           chmod +x ./*.sh tools/*.sh
           ./run_all_linux_tests.sh
-          ./test_build_compatibility_static.sh
-      - name: Build DEB packages
+      - name: Build Lite DEB packages
         run: ./wolfox_setup_build.sh
-      - name: Verify outputs
+      - name: Verify Lite outputs
         run: |
-          test -s WolFox.dylib
-          test -s WolFox_v1.8.6-Full_iOS15.8-26.5_Rootful.deb
-          test -s WolFox_v1.8.6-Full_iOS15.8-26.5_Rootless.deb
-      - name: Upload packages
+          test -s WolFoxLite.dylib
+          test -s WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootful.deb
+          test -s WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootless.deb
+      - name: Upload Lite packages
         uses: actions/upload-artifact@v4
         with:
-          name: WolFox-1.8.6-iOS15.8-26.5-arm64-${{ github.run_number }}
+          name: WolFox-Lite-1.8.6-iOS15.8-26.5-arm64-${{ github.run_number }}
           path: |
-            WolFox.dylib
-            WolFox_v1.8.6-Full_iOS15.8-26.5_Rootful.deb
-            WolFox_v1.8.6-Full_iOS15.8-26.5_Rootless.deb
+            WolFoxLite.dylib
+            WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootful.deb
+            WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootless.deb
           if-no-files-found: error
           retention-days: 14
