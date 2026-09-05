@@ -1,4 +1,4 @@
-name: Build WolFox 1.8.5
+name: Build WolFox Full 1.8.6
 
 on:
   push:
