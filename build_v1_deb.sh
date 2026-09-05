@@ -10,7 +10,7 @@ cd "$PROJECT_DIR"
 # Runtime target: iOS 15.8 through iOS 26.5
 # Build SDK: iPhoneOS 16.5. يظل Deployment Target عند iOS 15.8.
 WOLFOX_EDITION="${WOLFOX_EDITION:-Full}"
-VERSION="${WOLFOX_VERSION:-1.8.5-Full}"
+VERSION="${WOLFOX_VERSION:-1.8.6-Full}"
 if [ "$WOLFOX_EDITION" = "Lite" ]; then
     PRODUCT_NAME="WolFoxLite"
     PACKAGE_ID="com.wolfox.gpspro.lite"
