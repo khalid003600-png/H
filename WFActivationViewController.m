@@ -336,6 +336,7 @@
         [self.timerLabel.centerXAnchor constraintEqualToAnchor:self.loadingOverlay.centerXAnchor],
         [self.timerLabel.topAnchor constraintEqualToAnchor:self.waitLabel.bottomAnchor constant:15]
     ]];
+    [self activationCodeEditingChanged:self.codeField];
     if (self.noticeMessage.length) [self showActivationError:self.noticeMessage];
 }
 
