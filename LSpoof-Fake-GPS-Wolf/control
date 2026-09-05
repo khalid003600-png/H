@@ -1,0 +1,10 @@
+Package: com.fakegpswolf.lspoof
+Name: Fake GPS Wolf LSpoof
+Version: 1.8.6
+Architecture: iphoneos-arm
+Description: Fake GPS Wolf LSpoof location library and UI resources.
+Section: Tweaks
+Priority: optional
+Maintainer: Fake GPS Wolf
+Author: Fake GPS Wolf
+Depends: firmware (>= 15.0)
