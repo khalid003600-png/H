@@ -5,9 +5,9 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 run_test() {
     local test_file="$1"
-    if [ -x "$PROJECT_DIR/$test_file" ]; then
+    if [ -f "$PROJECT_DIR/$test_file" ]; then
         echo "=== $test_file ==="
-        "$PROJECT_DIR/$test_file"
+        bash "$PROJECT_DIR/$test_file"
     else
         echo "ℹ️  تم تخطي $test_file: الملف غير موجود في مصدر Full الحالي."
     fi
