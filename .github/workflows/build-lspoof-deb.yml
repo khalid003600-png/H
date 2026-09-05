@@ -1,0 +1,49 @@
+name: Build Fake GPS Wolf LSpoof DEB
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/lspoof-fake-gps-wolf
+    paths:
+      - 'LSpoof-Fake-GPS-Wolf/**'
+      - '.github/workflows/build-lspoof-deb.yml'
+  pull_request:
+    paths:
+      - 'LSpoof-Fake-GPS-Wolf/**'
+      - '.github/workflows/build-lspoof-deb.yml'
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packaging tools
+        run: brew install dpkg
+
+      - name: Install Theos
+        run: |
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Build dylib and DEB packages
+        working-directory: LSpoof-Fake-GPS-Wolf
+        run: bash ./build_deb.sh
+
+      - name: Show output
+        working-directory: LSpoof-Fake-GPS-Wolf
+        run: ls -lah packages
+
+      - name: Upload DEB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fake-GPS-Wolf-LSpoof-DEB
+          path: |
+            LSpoof-Fake-GPS-Wolf/packages/*.deb
+            LSpoof-Fake-GPS-Wolf/packages/*.dylib
+          if-no-files-found: error
+          retention-days: 30
