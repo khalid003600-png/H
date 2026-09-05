@@ -1,4 +1,4 @@
-name: Build WolFox Lite 1.8.6
+name: Build WolFox Lite 2.0.0
 
 on:
   pull_request:
@@ -28,7 +28,7 @@ jobs:
       WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
       WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
       WOLFOX_EDITION: Lite
-      WOLFOX_VERSION: 1.8.6-Lite
+      WOLFOX_VERSION: 2.0.0-Lite
 
     steps:
       - uses: actions/checkout@v4
@@ -45,15 +45,15 @@ jobs:
       - name: Verify Lite outputs
         run: |
           test -s WolFoxLite.dylib
-          test -s WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootful.deb
-          test -s WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootless.deb
+          test -s WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootful.deb
+          test -s WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootless.deb
       - name: Upload Lite packages
         uses: actions/upload-artifact@v4
         with:
-          name: WolFox-Lite-1.8.6-iOS15.8-26.5-arm64-${{ github.run_number }}
+          name: WolFox-Lite-2.0.0-iOS15.8-26.5-arm64-${{ github.run_number }}
           path: |
             WolFoxLite.dylib
-            WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootful.deb
-            WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootless.deb
+            WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootful.deb
+            WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootless.deb
           if-no-files-found: error
           retention-days: 14
