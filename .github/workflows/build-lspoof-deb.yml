@@ -30,12 +30,20 @@ jobs:
           git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
+      - name: Expand complete source bundle
+        run: |
+          rm -rf .ci-lspoof
+          mkdir .ci-lspoof
+          unzip -q LSpoof-Fake-GPS-Wolf/Fake-GPS-Wolf-LSpoof-Source-With-Build.zip -d .ci-lspoof
+          test -f .ci-lspoof/LSpoof-main/Source/FGWActivationViewController.m
+          test -f .ci-lspoof/LSpoof-main/build_deb.sh
+
       - name: Build dylib and DEB packages
-        working-directory: LSpoof-Fake-GPS-Wolf
+        working-directory: .ci-lspoof/LSpoof-main
         run: bash ./build_deb.sh
 
       - name: Show output
-        working-directory: LSpoof-Fake-GPS-Wolf
+        working-directory: .ci-lspoof/LSpoof-main
         run: ls -lah packages
 
       - name: Upload DEB artifacts
@@ -43,7 +51,7 @@ jobs:
         with:
           name: Fake-GPS-Wolf-LSpoof-DEB
           path: |
-            LSpoof-Fake-GPS-Wolf/packages/*.deb
-            LSpoof-Fake-GPS-Wolf/packages/*.dylib
+            .ci-lspoof/LSpoof-main/packages/*.deb
+            .ci-lspoof/LSpoof-main/packages/*.dylib
           if-no-files-found: error
           retention-days: 30
