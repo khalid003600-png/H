@@ -19,6 +19,7 @@
 #import "WolFoxProHookManager.h"
 #import "WolFoxProCellModel.h"
 #import "WFLicenseClient.h"
+#import "WFLicenseConfig.h"
 #import "WFActivationViewController.h"
 #import "WFSpoofScheduleManager.h"
 #import "WFHookDefaults.h"
@@ -359,11 +360,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.view addSubview:_header];
     
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(18, safeTop + 7, 135, 26)];
-#if WOLFOX_LITE
-    _titleLabel.text = @"WolFox Lite";
-#else
-    _titleLabel.text = @"Wolfox";
-#endif
+    _titleLabel.text = @"Fake GPS Wolf";
     _titleLabel.textAlignment = NSTextAlignmentLeft;
     _titleLabel.font = [WolFoxProTheme fontOfSize:20 weight:UIFontWeightBlack];
     _titleLabel.textColor = [WolFoxProTheme textPrimary];
@@ -3170,18 +3167,25 @@ static BOOL WFMasterProcessIsEligible(void) {
     NSString *deviceShort = [WFLicenseClient deviceIdentifier];
     if (deviceShort.length > 8) deviceShort = [deviceShort substringToIndex:8];
     NSString *code = [WFLicenseClient storedCode] ?: @"—";
-    NSString *status = info.success ? @"✅ نشط" : @"❌ غير نشط";
+    NSString *maskedCode = code;
+    if (code.length > 12) {
+        maskedCode = [NSString stringWithFormat:@"%@••••%@", [code substringToIndex:8], [code substringFromIndex:code.length - 4]];
+    }
+    NSString *rawVersion = [WF_APP_VERSION stringByReplacingOccurrencesOfString:@"-Full" withString:@""];
+    rawVersion = [rawVersion stringByReplacingOccurrencesOfString:@"-Lite" withString:@""];
+    NSString *displayVersion = [NSString stringWithFormat:@"Fake GPS Wolf v%@", rawVersion];
+    NSString *status = info.success ? @"نشط وآمن ✓" : @"غير نشط";
     [self showPopupWithTitle:@"معلومات الاشتراك" icon:@"crown.fill" content:^{
-        CGFloat contentWidth = MIN(300.0, self.view.bounds.size.width - 80.0);
+        CGFloat contentWidth = MIN(330.0, self.view.bounds.size.width - 64.0);
         UIView *v = [[UIView alloc] initWithFrame:CGRectMake(0, 0, contentWidth, 436)];
         [self addInfoRow:v t:@"الحالة" v:status y:0];
-        [self addInfoRow:v t:@"إصدار النسخة" v:@"WolFox Full v1.8.2" y:72];
-        [self addInfoRow:v t:@"نوع الباقة" v:info.planName ?: @"تجريبي" y:144];
+        [self addInfoRow:v t:@"الإصدار" v:displayVersion y:72];
+        [self addInfoRow:v t:@"الباقة" v:info.planName ?: @"غير محددة" y:144];
         [self addInfoRow:v t:@"تاريخ الانتهاء" v:info.expiresAt ?: @"غير متوفر" y:216];
-        [self addInfoRow:v t:@"كود التفعيل" v:code y:288];
+        [self addInfoRow:v t:@"كود التفعيل المحمي" v:maskedCode y:288];
         [self addInfoRow:v t:@"معرّف الجهاز" v:deviceShort y:360];
         return v;
-    } btnTitle:@"موافق" btnColor:[WolFoxProTheme accent]];
+    } btnTitle:@"إغلاق" btnColor:[WolFoxProTheme accent]];
 }
 
 - (void)addInfoRow:(UIView *)p t:(NSString *)t v:(NSString *)v y:(CGFloat)y {
