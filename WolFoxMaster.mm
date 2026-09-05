@@ -3173,7 +3173,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     }
     NSString *rawVersion = [WF_APP_VERSION stringByReplacingOccurrencesOfString:@"-Full" withString:@""];
     rawVersion = [rawVersion stringByReplacingOccurrencesOfString:@"-Lite" withString:@""];
-    NSString *displayVersion = [NSString stringWithFormat:@"Fake GPS Wolf v%@", rawVersion];
+    BOOL isLiteEdition = [WF_APP_VERSION hasSuffix:@"-Lite"];
+    NSString *editionName = isLiteEdition ? @"Lite" : @"Full";
+    NSString *displayVersion = [NSString stringWithFormat:@"WolFox %@ v%@", editionName, rawVersion];
     NSString *status = info.success ? @"نشط وآمن ✓" : @"غير نشط";
     [self showPopupWithTitle:@"معلومات الاشتراك" icon:@"crown.fill" content:^{
         CGFloat contentWidth = MIN(330.0, self.view.bounds.size.width - 64.0);

@@ -18,6 +18,8 @@
 @property (nonatomic, strong) UIButton *updateButton;
 @property (nonatomic, strong) UIButton *showToolButton;
 @property (nonatomic, strong) UIButton *skipButton;
+@property (nonatomic, strong) NSLayoutConstraint *showToolHeightConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *skipHeightConstraint;
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UIView *loadingOverlay;
 @property (nonatomic, strong) UILabel *timerLabel;
@@ -327,12 +329,12 @@
         [self.showToolButton.topAnchor constraintEqualToAnchor:self.updateButton.bottomAnchor constant:10],
         [self.showToolButton.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
         [self.showToolButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
-        [self.showToolButton.heightAnchor constraintEqualToConstant:44],
+        self.showToolHeightConstraint = [self.showToolButton.heightAnchor constraintEqualToConstant:0],
 
         [self.skipButton.topAnchor constraintEqualToAnchor:self.showToolButton.bottomAnchor constant:8],
         [self.skipButton.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
         [self.skipButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
-        [self.skipButton.heightAnchor constraintEqualToConstant:40],
+        self.skipHeightConstraint = [self.skipButton.heightAnchor constraintEqualToConstant:0],
 
         [self.uuidLabel.topAnchor constraintEqualToAnchor:self.skipButton.bottomAnchor constant:12],
         [self.uuidLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
@@ -472,6 +474,8 @@
             [[NSUserDefaults standardUserDefaults] synchronize];
             
             self.waitLabel.text = @"تم تفعيل الكود بنجاح";
+            self.showToolHeightConstraint.constant = 44.0;
+            self.skipHeightConstraint.constant = 40.0;
             self.timerLabel.hidden = YES;
             [self.lockIcon.layer removeAllAnimations];
             self.lockIcon.image = [UIImage systemImageNamed:@"checkmark.shield.fill"];
@@ -571,7 +575,13 @@
     self.statusLabel.textColor = [UIColor colorWithRed:1.0 green:0.50 blue:0.50 alpha:1.0];
     self.statusLabel.backgroundColor = [UIColor colorWithRed:0.35 green:0.08 blue:0.10 alpha:0.78];
     self.statusLabel.layer.borderColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.80].CGColor;
-    self.statusLabel.text = [NSString stringWithFormat:@"❌ لم يتم التفعيل\n%@\nيمكنك تصحيح الكود والمحاولة مجدداً.", message ?: @"تعذر إكمال التفعيل"];
+    self.showToolHeightConstraint.constant = 0.0;
+    self.skipHeightConstraint.constant = 0.0;
+    self.showToolButton.hidden = YES;
+    self.skipButton.hidden = YES;
+    self.lockIcon.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
+    self.lockIcon.tintColor = [WolFoxProTheme danger];
+    self.statusLabel.text = [NSString stringWithFormat:@"❌ تعذّر تفعيل الكود\n%@\nتحقق من الكود ثم حاول مرة أخرى.", message ?: @"تعذر إكمال التفعيل"];
     self.statusLabel.hidden = NO;
     self.statusLabel.alpha = 0;
     // FIX: show exit button so user can dismiss after a failed attempt
@@ -579,6 +589,7 @@
     [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{
         self.statusLabel.alpha = 1.0;
         self.exitButton.alpha = 1.0;
+        [self.view layoutIfNeeded];
     }];
 }
 
