@@ -30,20 +30,53 @@ jobs:
           git clone --recursive --depth 1 https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
-      - name: Expand complete source bundle
+      - name: Prepare LSpoof source
         run: |
           rm -rf .ci-lspoof
-          mkdir .ci-lspoof
-          unzip -q LSpoof-Fake-GPS-Wolf/Fake-GPS-Wolf-LSpoof-Source-With-Build.zip -d .ci-lspoof
-          test -f .ci-lspoof/LSpoof-main/Source/FGWActivationViewController.m
-          test -f .ci-lspoof/LSpoof-main/build_deb.sh
+          git clone --depth 1 https://github.com/ezzuldinSt/LSpoof.git .ci-lspoof
+          cp LSpoof-Fake-GPS-Wolf/Source/FGWActivationViewController.h .ci-lspoof/Source/
+          cp LSpoof-Fake-GPS-Wolf/Source/FGWActivationViewController.m .ci-lspoof/Source/
+          cp LSpoof-Fake-GPS-Wolf/build_deb.sh .ci-lspoof/build_deb.sh
+          chmod +x .ci-lspoof/build_deb.sh
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          makefile = Path('.ci-lspoof/Makefile')
+          text = makefile.read_text()
+          needle = '\tSource/PersistenceManager.m'
+          if 'Source/FGWActivationViewController.m' not in text:
+              text = text.replace(needle, '\tSource/PersistenceManager.m \\\n\tSource/FGWActivationViewController.m')
+          makefile.write_text(text)
+
+          picker = Path('.ci-lspoof/Source/MapPickerViewController.m')
+          text = picker.read_text()
+          if '#import "FGWActivationViewController.h"' not in text:
+              text = text.replace('#import "RouteSimulator.h"', '#import "RouteSimulator.h"\n#import "FGWActivationViewController.h"')
+
+          old = '''- (void)viewDidAppear:(BOOL)animated {\n    [super viewDidAppear:animated];\n    LSSetHooksBypassed(YES);\n    [self configureMapIfNeeded];\n}'''
+          new = '''- (void)viewDidAppear:(BOOL)animated {\n    [super viewDidAppear:animated];\n    LSSetHooksBypassed(YES);\n    [self configureMapIfNeeded];\n\n    if (![FGWActivationViewController isLocallyActivated] && self.presentedViewController == nil) {\n        FGWActivationViewController *activation = [[FGWActivationViewController alloc] init];\n        activation.modalPresentationStyle = UIModalPresentationOverFullScreen;\n        [self presentViewController:activation animated:YES completion:nil];\n    }\n}'''
+          if old in text:
+              text = text.replace(old, new)
+          elif 'FGWActivationViewController *activation' not in text:
+              raise SystemExit('Could not locate viewDidAppear block for activation patch')
+
+          text = text.replace('self.titleLabel.text = @"Location Spoofer";', 'self.titleLabel.text = @"Fake GPS Wolf";')
+          text = text.replace('self.subtitleLabel.text = @"Choose where apps think you are";', 'self.subtitleLabel.text = @"حدد موقعك بالطريقة التي تناسبك";')
+          text = text.replace('self.searchBar.placeholder = @"Search city, address, or landmark";', 'self.searchBar.placeholder = @"ابحث عن موقع أو عنوان";')
+          picker.write_text(text)
+          PY
+
+          test -f .ci-lspoof/Source/FGWActivationViewController.m
+          grep -q 'FGWActivationViewController.m' .ci-lspoof/Makefile
+          grep -q 'Fake GPS Wolf' .ci-lspoof/Source/MapPickerViewController.m
 
       - name: Build dylib and DEB packages
-        working-directory: .ci-lspoof/LSpoof-main
+        working-directory: .ci-lspoof
         run: bash ./build_deb.sh
 
       - name: Show output
-        working-directory: .ci-lspoof/LSpoof-main
+        working-directory: .ci-lspoof
         run: ls -lah packages
 
       - name: Upload DEB artifacts
@@ -51,7 +84,7 @@ jobs:
         with:
           name: Fake-GPS-Wolf-LSpoof-DEB
           path: |
-            .ci-lspoof/LSpoof-main/packages/*.deb
-            .ci-lspoof/LSpoof-main/packages/*.dylib
+            .ci-lspoof/packages/*.deb
+            .ci-lspoof/packages/*.dylib
           if-no-files-found: error
           retention-days: 30
