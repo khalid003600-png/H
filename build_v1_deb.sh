@@ -6,10 +6,10 @@ umask 077
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
-# WolFox v1.8.2 Full Dark Blue Panel UI build
+# WolFox v1.8.3 Full Dark Blue Panel UI build
 # Runtime target: iOS 15.8 through iOS 26.5
 # Build SDK: iPhoneOS 16.5. يظل Deployment Target عند iOS 15.8.
-VERSION="1.8.2-Full"
+VERSION="1.8.3-Full"
 # Clang يقبل X.Y فقط كـ deployment target — نستخدم 15.0 بدلاً من 15.8
 # الكود نفسه يعمل على 15.8 لأنه لا يستخدم أي API فوق iOS 15.0
 MIN_IOS="${MIN_IOS:-15.0}"
