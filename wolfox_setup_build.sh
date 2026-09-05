@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WolFox v1.8.2-Full — إعداد وبناء كامل على Ubuntu 20.04/22.04/24.04.
+# WolFox Full/Lite — إعداد وبناء مشترك على Ubuntu 20.04/22.04/24.04.
 # الناتج: حزمة Rootful وحزمة Rootless وملف WolFox.dylib موقّع ad-hoc.
 set -euo pipefail
 
@@ -15,7 +15,8 @@ SDK_VERSION="16.5"
 COMPAT_SDK_VERSION="13.7"
 SDK_RELEASE_TAG="master-146e41f"
 SDK_RELEASE_BASE="https://github.com/theos/sdks/releases/download/${SDK_RELEASE_TAG}"
-WOLFOX_VERSION="1.8.2-Full"
+WOLFOX_EDITION="${WOLFOX_EDITION:-Full}"
+WOLFOX_VERSION="${WOLFOX_VERSION:-1.8.6-Full}"
 TARGET_BUNDLE_IDS="${WOLFOX_TARGET_BUNDLE_IDS:-sa.gov.moia.mosques-2}"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -121,6 +122,8 @@ LDID="$LDID_PATH" \
 MIN_IOS=15.0 \
 REQUIRED_SDK_VERSION="$SDK_VERSION" \
 WOLFOX_ARCHS=arm64 \
+WOLFOX_EDITION="$WOLFOX_EDITION" \
+WOLFOX_VERSION="$WOLFOX_VERSION" \
 WOLFOX_TARGET_BUNDLE_IDS="$TARGET_BUNDLE_IDS" \
 WOLFOX_REQUIRE_SIGNING=1 \
 WOLFOX_HARDENING=1 \
@@ -128,6 +131,6 @@ WOLFOX_HARDENING=1 \
 
 echo
 success "اكتمل البناء بنجاح"
-for output in "$SOURCE_DIR"/WolFox*.deb "$SOURCE_DIR"/WolFox.dylib; do
+for output in "$SOURCE_DIR"/WolFox*.deb "$SOURCE_DIR"/WolFox*.dylib; do
     [ -f "$output" ] && echo "  ✅ $output ($(du -h "$output" | cut -f1))"
 done
