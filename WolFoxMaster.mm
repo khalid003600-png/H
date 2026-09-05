@@ -855,13 +855,15 @@ static BOOL WFMasterProcessIsEligible(void) {
     }];
     [ac addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
     [ac addAction:[UIAlertAction actionWithTitle:@"حفظ" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){
-        NSString *name = ac.textFields[0].text;
-        NSString *uuid = ac.textFields[1].text;
+        NSString *name = [ac.textFields[0].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        NSString *uuid = [[ac.textFields[1].text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
         if (name.length == 0) { [self showToast:@"❌ الاسم مطلوب"]; return; }
+        NSUUID *validatedUUID = uuid.length ? [[NSUUID alloc] initWithUUIDString:uuid] : [NSUUID UUID];
+        if (!validatedUUID) { [self showToast:@"❌ صيغة UUID غير صحيحة"]; return; }
         WolFoxBleProfile *p = [WolFoxBleProfile new];
         p.profileID = [[NSUUID UUID] UUIDString];
         p.name      = name;
-        p.uuid      = uuid.length > 0 ? uuid : [[NSUUID UUID] UUIDString];
+        p.uuid      = validatedUUID.UUIDString;
         p.localName = name;
         p.rssi      = -60;
         [[WolFoxProStore shared] saveBleProfile:p];
@@ -3021,7 +3023,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     logoutBtn.tintColor = [UIColor whiteColor];
     logoutBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
     [logoutBtn addTarget:self action:@selector(logoutPressed) forControlEvents:UIControlEventTouchUpInside];
-    logoutBtn.accessibilityLabel = @"تسجيل الخروج وحذف الترخيص";
+    logoutBtn.accessibilityLabel = @"إيقاف الأداة مع الاحتفاظ بكود التفعيل";
     [logoutCard addSubview:logoutBtn];
     cy += 66 + 20;
 
@@ -3163,18 +3165,18 @@ static BOOL WFMasterProcessIsEligible(void) {
 // activateCodePressed removed - activation handled by WFActivationViewController
 
 - (void)logoutPressed {
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"تسجيل الخروج" message:@"هل أنت متأكد من رغبتك في حذف الترخيص من هذا الجهاز؟" preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"إيقاف الأداة" message:@"سيتم إيقاف GPS والكاميرا والبلوتوث مع الاحتفاظ بكود التفعيل على هذا الجهاز." preferredStyle:UIAlertControllerStyleAlert];
     [ac addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
-    [ac addAction:[UIAlertAction actionWithTitle:@"نعم، حذف" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a){
-        [WFLicenseClient clearStoredLicense];
-        [WolFoxProStore shared].spoofActive = NO;
-        [WolFoxProStore shared].scheduleApplied = NO;
-        [[WolFoxProStore shared] saveSettings];
+    [ac addAction:[UIAlertAction actionWithTitle:@"إيقاف الآن" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action){
+        WolFoxProStore *store = [WolFoxProStore shared];
         [[WolFoxProHookManager shared] stopRoute];
-        // أغلق الـ UI وأظهر شاشة التفعيل بدلاً من exit() الذي يقتل العملية بلا تنظيف
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [[WolFoxController shared] showActivationScreenWithResult:nil];
-        });
+        [WFVirtualCameraManager shared].enabled = NO;
+        store.spoofActive = NO;
+        store.bluetoothActive = NO;
+        store.scheduleApplied = NO;
+        [store saveSettings];
+        [self refreshSpoofHeaderStatus];
+        [self showToast:@"تم إيقاف الأداة مع الاحتفاظ بكود التفعيل"];
     }]];
     [self presentViewController:ac animated:YES completion:nil];
 }
@@ -3457,9 +3459,12 @@ static BOOL WFMasterProcessIsEligible(void) {
             CLLocationCoordinate2D current = [WolFoxProStore shared].currentFakeCoords;
             CLLocationCoordinate2D target = [WolFoxProStore shared].targetRouteCoords;
             // FIX: نفس حساب البearing الجغرافي الصحيح
-            double dLat = target.latitude  - current.latitude;
-            double dLon = target.longitude - current.longitude;
-            CGFloat bearing = (CGFloat)atan2(dLon, dLat);
+            double lat1 = current.latitude * M_PI / 180.0;
+            double lat2 = target.latitude * M_PI / 180.0;
+            double dLon = (target.longitude - current.longitude) * M_PI / 180.0;
+            double y = sin(dLon) * cos(lat2);
+            double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+            CGFloat bearing = (CGFloat)atan2(y, x);
             marker.transform = CGAffineTransformMakeRotation(bearing);
         } else {
             marker.transform = CGAffineTransformIdentity;
