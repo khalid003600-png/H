@@ -1,6 +1,7 @@
 // WFNetworkPairingStore.m
 #import "WFNetworkPairingStore.h"
 #import <Security/Security.h>
+#import <CommonCrypto/CommonDigest.h>
 
 static NSString *const WFNetworkProfilesDefaultsKey = @"WF_NETWORK_PAIRING_PROFILES_V1";
 static NSString *const WFNetworkSecretService = @"fun.p3nd.wolfox.network-pairing";
@@ -140,7 +141,7 @@ static NSString *WFNormalizedPin(NSString *value) {
                                     (__bridge CFDictionaryRef)@{(__bridge id)kSecValueData: data});
     if (status == errSecItemNotFound) {
         query[(__bridge id)kSecValueData] = data;
-        query[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
+        query[(__bridge id)kSecAttrAccessible] = (__bridge id)kSecAttrAccessibleWhenUnlockedThisDeviceOnly;
         status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
     }
     if (status != errSecSuccess && error) *error = [self errorWithCode:status message:@"تعذر حفظ سر الاقتران في Keychain"];
@@ -184,19 +185,65 @@ static NSString *WFNormalizedPin(NSString *value) {
     return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 }
 
+- (NSArray<WFNetworkPairingProfile *> *)automaticReconnectProfiles {
+    NSPredicate *allowed = [NSPredicate predicateWithBlock:^BOOL(WFNetworkPairingProfile *profile, NSDictionary *bindings) {
+        return profile.autoReconnect;
+    }];
+    return [self.profiles filteredArrayUsingPredicate:allowed];
+}
+
+- (BOOL)validateServerTrust:(SecTrustRef)trust forProfileID:(NSString *)profileID error:(NSError **)error {
+    WFNetworkPairingProfile *profile = [self profileWithID:profileID];
+    if (!trust || profile.kind != WFNetworkProfileKindTLS || !profile.certificateSHA256.length) {
+        if (error) *error = [self errorWithCode:6 message:@"ملف SSL أو بصمة الشهادة غير متوفرين"];
+        return NO;
+    }
+    CFErrorRef trustError = NULL;
+    if (!SecTrustEvaluateWithError(trust, &trustError)) {
+        if (error) *error = CFBridgingRelease(trustError);
+        return NO;
+    }
+    SecCertificateRef certificate = SecTrustGetCertificateAtIndex(trust, 0);
+    if (!certificate) {
+        if (error) *error = [self errorWithCode:7 message:@"تعذر قراءة شهادة الخادم"];
+        return NO;
+    }
+    NSData *certificateData = CFBridgingRelease(SecCertificateCopyData(certificate));
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(certificateData.bytes, (CC_LONG)certificateData.length, digest);
+    NSMutableString *actualPin = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (NSUInteger i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [actualPin appendFormat:@"%02x", digest[i]];
+
+    NSData *actual = [actualPin dataUsingEncoding:NSUTF8StringEncoding];
+    NSData *expected = [profile.certificateSHA256 dataUsingEncoding:NSUTF8StringEncoding];
+    if (actual.length != expected.length) {
+        if (error) *error = [self errorWithCode:8 message:@"بصمة شهادة SSL غير مطابقة"];
+        return NO;
+    }
+    const uint8_t *a = actual.bytes, *b = expected.bytes;
+    uint8_t difference = 0;
+    for (NSUInteger i = 0; i < actual.length; i++) difference |= a[i] ^ b[i];
+    if (difference != 0) {
+        if (error) *error = [self errorWithCode:8 message:@"بصمة شهادة SSL غير مطابقة"];
+        return NO;
+    }
+    return YES;
+}
+
 - (BOOL)deleteProfileID:(NSString *)profileID error:(NSError **)error {
     if (!profileID.length) return NO;
+    // Remove the secret first. Metadata remains recoverable if Keychain deletion fails.
+    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)[self keychainQueryForProfileID:profileID]);
+    if (status != errSecSuccess && status != errSecItemNotFound) {
+        if (error) *error = [self errorWithCode:status message:@"تعذر حذف سر الاقتران من Keychain"];
+        return NO;
+    }
     @synchronized (self) {
         NSIndexSet *indexes = [self.mutableProfiles indexesOfObjectsPassingTest:^BOOL(WFNetworkPairingProfile *item, NSUInteger idx, BOOL *stop) {
             return [item.profileID isEqualToString:profileID];
         }];
         [self.mutableProfiles removeObjectsAtIndexes:indexes];
         [self persistProfiles];
-    }
-    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)[self keychainQueryForProfileID:profileID]);
-    if (status != errSecSuccess && status != errSecItemNotFound) {
-        if (error) *error = [self errorWithCode:status message:@"حُذف الملف وتعذر حذف سره من Keychain"];
-        return NO;
     }
     return YES;
 }
