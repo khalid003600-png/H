@@ -34,8 +34,16 @@ if grep -q 'kCacheTTL\|age >' "$CLIENT"; then
     echo "FAIL: cached activation must be governed by expires_at, not an artificial TTL"
     exit 1
 fi
-grep -q 'انتهاء المدة هو الحالة الوحيدة التي تمسح الكود نهائياً' "$CLIENT"
 grep -q 'status == WFLicenseStatusExpired' "$CLIENT"
+
+# انتهاء الاشتراك أو إيقافه يعطّل التشغيل من دون حذف كود العميل.
+EXPIRATION_BLOCK="$(sed -n '/if (\[self isExplicitExpirationResult:result\])/,/^[[:space:]]*}/p' "$CLIENT")"
+if grep -q 'clearStoredLicense' <<< "$EXPIRATION_BLOCK"; then
+    echo "FAIL: expiration must retain the locally saved license code"
+    exit 1
+fi
+grep -q 'markSuspendedKeepingCode:result.errorCode ?: @"license_expired"' "$CLIENT"
+grep -q 'markSuspendedKeepingCode:expired.errorCode' "$CLIENT"
 
 # طلب التفعيل يبدأ فوراً بلا عدّ تنازلي مصطنع.
 grep -q '\[self finalizeActivation\];' "$VIEW"
