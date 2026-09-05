@@ -1,4 +1,8 @@
 #import "WFRedactedLogger.h"
+
+#ifndef WOLFOX_LITE
+#define WOLFOX_LITE 0
+#endif
 // WolFoxMaster.mm - WolFox v1.8.2 Full "Dark Blue Panel UI"
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -355,7 +359,11 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.view addSubview:_header];
     
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(18, safeTop + 7, 135, 26)];
+#if WOLFOX_LITE
+    _titleLabel.text = @"WolFox Lite";
+#else
     _titleLabel.text = @"Wolfox";
+#endif
     _titleLabel.textAlignment = NSTextAlignmentLeft;
     _titleLabel.font = [WolFoxProTheme fontOfSize:20 weight:UIFontWeightBlack];
     _titleLabel.textColor = [WolFoxProTheme textPrimary];
@@ -385,13 +393,24 @@ static BOOL WFMasterProcessIsEligible(void) {
     _tabsBar.layer.borderColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.18].CGColor;
     [self.view addSubview:_tabsBar];
     
+#if WOLFOX_LITE
+    UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 2.0, 4)];
+#else
     UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 5.0, 4)];
+#endif
     indicator.backgroundColor = [WolFoxProTheme accent];
     objc_setAssociatedObject(self, "_tab_indicator", indicator, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [_tabsBar addSubview:indicator];
     
+#if WOLFOX_LITE
+    NSArray *icons = @[@"location.fill", @"gearshape.fill"];
+    NSArray *tabLabels = @[@"الموقع والمفضلة", @"الإعدادات والإخفاء"];
+    NSArray *tabPages = @[@0, @4];
+#else
     NSArray *icons = @[@"location.fill", @"person.text.rectangle.fill", @"antenna.radiowaves.left.and.right", @"camera.fill", @"gearshape.fill"];
     NSArray *tabLabels = @[@"الموقع GPS", @"معرف الجهاز", @"البلوتوث", @"الكاميرا", @"الإعدادات"];
+    NSArray *tabPages = @[@0, @1, @2, @3, @4];
+#endif
     CGFloat tw = w / icons.count;
     UIImageSymbolConfiguration *tabConfig = nil;
     if (@available(iOS 13.0, *)) {
@@ -405,7 +424,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         }
         b.tintColor = [UIColor whiteColor];
         b.adjustsImageWhenHighlighted = NO;
-        b.tag = i;
+        b.tag = [tabPages[i] integerValue];
         b.accessibilityLabel = tabLabels[i];
         b.accessibilityHint = @"يفتح هذا القسم";
         [b addTarget:self action:@selector(tabBtnPressed:) forControlEvents:UIControlEventTouchUpInside];
@@ -506,7 +525,11 @@ static BOOL WFMasterProcessIsEligible(void) {
 
 - (void)refreshSpoofHeaderStatus {
     WolFoxProStore *store = [WolFoxProStore shared];
+#if WOLFOX_LITE
+    BOOL active = store.spoofActive;
+#else
     BOOL active = store.spoofActive || store.bluetoothActive || store.mediaUploadActive || [store validatedActiveIdentifier] != nil;
+#endif
     _spoofStatusLabel.text = active ? @"● نشط • التزييف مفعّل" : @"○ متوقف • الوضع الحقيقي";
     _spoofStatusLabel.textColor = active ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
     _spoofStatusLabel.accessibilityLabel = active ? @"حالة التزييف: نشط" : @"حالة التزييف: متوقف";
@@ -529,9 +552,12 @@ static BOOL WFMasterProcessIsEligible(void) {
         for (UIView *v in _tabsBar.subviews) { if (v.frame.size.height == 3) { indicator = v; break; } }
     }
 
-    // Full يعرض خمسة أقسام فعلية؛ يحسب المؤشر والتحديد من عدد الأزرار الحقيقي.
+    // يحسب موضع المؤشر من الزر الفعلي؛ يدعم Full بخمسة أقسام وLite بقسمين.
     CGFloat tabCount = MAX((CGFloat)_tabBtns.count, 1.0);
-    NSInteger tabIndex = MIN(MAX(page, 0), (NSInteger)_tabBtns.count - 1);
+    NSInteger tabIndex = 0;
+    for (NSUInteger index = 0; index < _tabBtns.count; index++) {
+        if (_tabBtns[index].tag == page) { tabIndex = (NSInteger)index; break; }
+    }
     CGFloat tw = w / tabCount;
     if (indicator) {
         [UIView performWithoutAnimation:^{
@@ -539,8 +565,8 @@ static BOOL WFMasterProcessIsEligible(void) {
         }];
     }
     for (UIButton *b in _tabBtns) {
-        b.tintColor = (b.tag == tabIndex) ? [WolFoxProTheme accent] : [UIColor whiteColor];
-        b.accessibilityTraits = (b.tag == tabIndex) ? UIAccessibilityTraitSelected : UIAccessibilityTraitNone;
+        b.tintColor = (b.tag == page) ? [WolFoxProTheme accent] : [UIColor whiteColor];
+        b.accessibilityTraits = (b.tag == page) ? UIAccessibilityTraitSelected : UIAccessibilityTraitNone;
     }
 
     for (UIView *v in _scrollDashboard.subviews) [v removeFromSuperview];
