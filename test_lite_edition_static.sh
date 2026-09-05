@@ -11,7 +11,7 @@ check() { grep -Fq "$2" "$1" || { echo "❌ $3"; exit 1; }; echo "✅ $3"; }
 check "$MASTER" "#if WOLFOX_LITE" "وجود واجهة Lite المشروطة"
 check "$MASTER" '@[@"location.fill", @"gearshape.fill"]' "Lite تعرض الموقع والإعدادات فقط"
 check "$MASTER" '@[@"الموقع والمفضلة", @"الإعدادات والإخفاء"]' "توضيح أقسام Lite"
-check "$MASTER" "if (_tabBtns[index].tag == page)" "تنقل Lite الصحيح بين القسمين"
+check "$MASTER" "if (candidate.tag == page)" "تنقل Lite الصحيح بين القسمين"
 check "$MASTER" "BOOL active = store.spoofActive;" "حالة Lite تعتمد على تزييف الموقع فقط"
 check "$BUILD" 'COMMON_FLAGS+=(-DWOLFOX_LITE=1)' "علامة Lite تضاف أثناء الترجمة"
 check "$BUILD" 'PACKAGE_ID="com.wolfox.gpspro.lite"' "معرّف تثبيت مستقل لنسخة Lite"
