@@ -18,7 +18,7 @@
 #endif
 
 #ifndef WF_TWEAK_VERSION
-#define WF_TWEAK_VERSION @"1.8.4-Full"
+#define WF_TWEAK_VERSION @"1.8.5-Full"
 #endif
 
 #define WF_APP_VERSION WF_TWEAK_VERSION
