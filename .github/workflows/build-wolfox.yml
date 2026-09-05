@@ -1,4 +1,4 @@
-name: Build WolFox 1.8.3
+name: Build WolFox 1.8.4
 
 on:
   push:
@@ -109,19 +109,19 @@ jobs:
       - name: Verify build products
         run: |
           test -s WolFox.dylib
-          test -s WolFox_v1.8.3-Full_iOS15.8-26.5_Rootful.deb
-          test -s WolFox_v1.8.3-Full_iOS15.8-26.5_Rootless.deb
+          test -s WolFox_v1.8.4-Full_iOS15.8-26.5_Rootful.deb
+          test -s WolFox_v1.8.4-Full_iOS15.8-26.5_Rootless.deb
           file WolFox.dylib
-          dpkg-deb --info WolFox_v1.8.3-Full_iOS15.8-26.5_Rootful.deb
-          dpkg-deb --info WolFox_v1.8.3-Full_iOS15.8-26.5_Rootless.deb
+          dpkg-deb --info WolFox_v1.8.4-Full_iOS15.8-26.5_Rootful.deb
+          dpkg-deb --info WolFox_v1.8.4-Full_iOS15.8-26.5_Rootless.deb
 
       - name: Upload WolFox packages
         uses: actions/upload-artifact@v4
         with:
-          name: WolFox-1.8.3-iOS15.8-26.5-arm64
+          name: WolFox-1.8.4-iOS15.8-26.5-arm64
           if-no-files-found: error
           retention-days: 14
           path: |
             WolFox.dylib
-            WolFox_v1.8.3-Full_iOS15.8-26.5_Rootful.deb
-            WolFox_v1.8.3-Full_iOS15.8-26.5_Rootless.deb
+            WolFox_v1.8.4-Full_iOS15.8-26.5_Rootful.deb
+            WolFox_v1.8.4-Full_iOS15.8-26.5_Rootless.deb
