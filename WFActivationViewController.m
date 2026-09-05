@@ -547,7 +547,7 @@
     NSString *plan = result.planName.length ? result.planName : @"غير محددة";
     NSString *started = result.startedAt.length ? result.startedAt : @"غير متوفر";
     NSString *expires = result.expiresAt.length ? result.expiresAt : @"غير متوفر";
-    return [NSString stringWithFormat:@"تم التفعيل بنجاح\nالباقة: %@\nمن: %@\nإلى: %@\nالجهاز مرتبط ومصرّح", plan, started, expires];
+    return [NSString stringWithFormat:@"✅ تم التفعيل بنجاح\nالباقة: %@\nبداية الاشتراك: %@\nنهاية الاشتراك: %@\nالجهاز: مرتبط ومصرّح", plan, started, expires];
 }
 
 - (UIColor *)statusColorForResult:(WFLicenseResult *)result {
