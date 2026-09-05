@@ -51,6 +51,6 @@ assert_contains "$MASTER" "normalizedMapSearchText" "دعم تطبيع نص ال
 assert_contains "$MASTER" "CLGeocoder" "وجود مسار احتياطي للبحث الجغرافي"
 assert_contains "$MASTER" "sin(dLon) * cos(lat2)" "اتجاه المسار محسوب كروياً"
 
-assert_contains "$CONFIG" "1.8.3-Full" "رقم الإصدار 1.8.3-Full"
+assert_contains "$CONFIG" "1.8.4-Full" "رقم الإصدار 1.8.4-Full"
 
 echo "✅ اجتازت تطويرات WolFox 1.8.3 اختبارات الحماية الثابتة."
