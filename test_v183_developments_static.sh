@@ -6,6 +6,7 @@ MASTER="$PROJECT_DIR/WolFoxMaster.mm"
 HOOKS="$PROJECT_DIR/WolFoxProHookManager.m"
 CAMERA="$PROJECT_DIR/WFVirtualCameraManager.mm"
 CONFIG="$PROJECT_DIR/WFLicenseConfig.h"
+BUILD_SCRIPT="$PROJECT_DIR/build_v1_deb.sh"
 
 assert_contains() {
     local file="$1"
@@ -51,6 +52,11 @@ assert_contains "$MASTER" "normalizedMapSearchText" "دعم تطبيع نص ال
 assert_contains "$MASTER" "CLGeocoder" "وجود مسار احتياطي للبحث الجغرافي"
 assert_contains "$MASTER" "sin(dLon) * cos(lat2)" "اتجاه المسار محسوب كروياً"
 
-assert_contains "$CONFIG" "1.8.4-Full" "رقم الإصدار 1.8.4-Full"
+CURRENT_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+-Full' "$CONFIG" | head -n 1)"
+if [ -z "$CURRENT_VERSION" ]; then
+    echo "❌ تعذر قراءة رقم الإصدار الحالي"
+    exit 1
+fi
+assert_contains "$BUILD_SCRIPT" "$CURRENT_VERSION" "تطابق إصدار المصدر والبناء: $CURRENT_VERSION"
 
-echo "✅ اجتازت تطويرات WolFox 1.8.3 اختبارات الحماية الثابتة."
+echo "✅ اجتازت تطويرات WolFox $CURRENT_VERSION اختبارات الحماية الثابتة."
