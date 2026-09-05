@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MASTER="$PROJECT_DIR/WolFoxMaster.mm"
 HOOKS="$PROJECT_DIR/WolFoxProHookManager.m"
-CAMERA="$PROJECT_DIR/WFVirtualCameraManager.m"
+CAMERA="$PROJECT_DIR/WFVirtualCameraManager.mm"
 CONFIG="$PROJECT_DIR/WFLicenseConfig.h"
 
 assert_contains() {
@@ -39,11 +39,12 @@ assert_not_contains "$MASTER" "[WFLicenseClient clearStoredLicense]" "إيقاف
 assert_contains "$MASTER" "مع الاحتفاظ بكود التفعيل" "واجهة الإيقاف توضح حفظ التفعيل"
 
 assert_contains "$MASTER" "initWithUUIDString" "التحقق من UUID البلوتوث مفعّل"
-assert_contains "$MASTER" "UUID غير صالح" "رسالة واضحة لمعرّف البلوتوث غير الصالح"
+assert_contains "$MASTER" "صيغة UUID غير صحيحة" "رسالة واضحة لمعرّف البلوتوث غير الصالح"
 
 assert_contains "$CAMERA" "maximumDimension = 4096.0" "حماية الذاكرة للصور الكبيرة"
 assert_contains "$CAMERA" "invalidatePixelBufferCacheLocked" "إبطال ذاكرة الكاميرا المؤقتة عند التغيير"
-assert_contains "$CAMERA" "kCAGravityResizeAspect" "الحفاظ على أبعاد الصورة الافتراضية"
+assert_contains "$CAMERA" "format.opaque = YES" "تحسين رسم الصورة الافتراضية"
+assert_contains "$CAMERA" "CGFloat scale = MIN((CGFloat)width / imageWidth" "الحفاظ على نسبة أبعاد الصورة"
 
 assert_contains "$MASTER" "[_activeMapSearch cancel]" "إلغاء طلب البحث السابق"
 assert_contains "$MASTER" "normalizedMapSearchText" "دعم تطبيع نص البحث والإحداثيات"
