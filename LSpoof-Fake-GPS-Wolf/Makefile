@@ -12,6 +12,7 @@ LocationSpoofer_FILES = \
 	Source/RouteSimulator.m \
 	Source/BookmarksManager.m \
 	Source/OverlayWindow.m \
+	Source/FGWActivationViewController.m \
 	Source/MapPickerViewController.m \
 	Source/MapPickerViewController+Route.m \
 	Source/MapPickerViewController+Bookmarks.m \
