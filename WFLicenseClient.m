@@ -187,7 +187,8 @@ static const NSUInteger kMaximumRequestAttempts = 2;
             NSString *storedCode = [self storedCode];
             BOOL sameStoredCode = storedCode.length && [storedCode caseInsensitiveCompare:trimmed] == NSOrderedSame;
             if (sameStoredCode && [self isExplicitExpirationResult:result]) {
-                [self clearStoredLicense];
+                // انتهاء الاشتراك يعطّل التشغيل، لكنه لا يحذف كود العميل المحفوظ.
+                [self markSuspendedKeepingCode:result.errorCode ?: @"license_expired"];
             } else if (sameStoredCode && [self isExplicitSuspensionResult:result json:json]) {
                 [self markSuspendedKeepingCode:result.errorCode ?: [self responseStatus:json] ?: @"suspended"];
             }
@@ -264,8 +265,9 @@ static const NSUInteger kMaximumRequestAttempts = 2;
         }
 
         if ([self isExplicitExpirationResult:result]) {
-            // انتهاء المدة هو الحالة الوحيدة التي تمسح الكود نهائياً.
-            [self clearStoredLicense];
+            // نحظر التشغيل عند انتهاء المدة مع الاحتفاظ بالكود لإعادة التجديد
+            // أو المعالجة من لوحة الإدارة من دون إجبار العميل على إدخاله مجدداً.
+            [self markSuspendedKeepingCode:result.errorCode ?: @"license_expired"];
             [self complete:completion result:result];
             return;
         }
@@ -646,7 +648,8 @@ static const NSUInteger kMaximumRequestAttempts = 2;
                                                    expires:expires
                                                       plan:[self stringValue:data[@"plan"]]];
         expired.errorCode = @"license_expired";
-        [self clearStoredLicense];
+        // الكاش المنتهي يوقف الترخيص فقط؛ يبقى الكود محفوظاً للاستعادة أو التجديد.
+        [self markSuspendedKeepingCode:expired.errorCode];
         return expired;
     }
 
