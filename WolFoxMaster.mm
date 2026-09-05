@@ -556,7 +556,8 @@ static BOOL WFMasterProcessIsEligible(void) {
     CGFloat tabCount = MAX((CGFloat)_tabBtns.count, 1.0);
     NSInteger tabIndex = 0;
     for (NSUInteger index = 0; index < _tabBtns.count; index++) {
-        if (_tabBtns[index].tag == page) { tabIndex = (NSInteger)index; break; }
+        UIButton *candidate = (UIButton *)_tabBtns[index];
+        if (candidate.tag == page) { tabIndex = (NSInteger)index; break; }
     }
     CGFloat tw = w / tabCount;
     if (indicator) {
