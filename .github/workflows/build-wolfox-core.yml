@@ -1,0 +1,85 @@
+name: Build WolFox Framework Core
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '06_WolFox_Framework_Core/**'
+      - 'build_wolfox_core.sh'
+      - '.github/workflows/build-wolfox-core.yml'
+      - 'WFLicenseClient.*'
+      - 'WolFoxProStore.*'
+      - 'WolFoxProHookManager.*'
+      - 'WolFoxProTheme.*'
+      - 'WFRedactedLogger.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wolfox-core-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  THEOS: ${{ github.workspace }}/.theos
+  WOLFOX_CORE_VERSION: 1.0.0
+  WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
+  WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+  WOLFOX_PROJECT_BUNDLE_ID: com.wolfox.gpspro
+
+jobs:
+  build:
+    name: WolFoxCore 1.0.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            build-essential ca-certificates clang curl git libplist-dev libssl-dev lld llvm \
+            make pkg-config unzip wget xz-utils zlib1g-dev
+
+      - name: Install Theos and SDK
+        run: |
+          git clone --quiet --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          curl --fail --location --retry 3 \
+            -o /tmp/iPhoneOS16.5.sdk.tar.xz \
+            https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS16.5.sdk.tar.xz
+          tar -xJf /tmp/iPhoneOS16.5.sdk.tar.xz -C "$THEOS/sdks"
+
+      - name: Build ldid
+        run: |
+          git clone --quiet --depth 1 --recurse-submodules https://github.com/ProcursusTeam/ldid.git /tmp/ldid
+          make -C /tmp/ldid -j"$(nproc)"
+          test -x /tmp/ldid/ldid
+
+      - name: Build WolFoxCore
+        env:
+          SDKROOT: ${{ github.workspace }}/.theos/sdks/iPhoneOS16.5.sdk
+          LDID: /tmp/ldid/ldid
+          MIN_IOS: 15.0
+        run: |
+          chmod +x build_wolfox_core.sh
+          ./build_wolfox_core.sh
+
+      - name: Verify
+        run: |
+          test -s WolFoxCore.dylib
+          file WolFoxCore.dylib
+          cat SHA256SUMS-WolFoxCore.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WolFox-Framework-Core-v1.0.0-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            WolFoxCore.dylib
+            SHA256SUMS-WolFoxCore.txt
+            06_WolFox_Framework_Core/WolFoxCore.h
+            06_WolFox_Framework_Core/README_AR.md
