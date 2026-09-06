@@ -124,16 +124,20 @@ make_deb() {
     local prefix=""
     rm -rf "$root"
     mkdir -p "$root/DEBIAN"
+    chmod 0755 "$root" "$root/DEBIAN"
     if [ "$mode" = "rootless" ]; then
         prefix="$root/var/jb"
     else
         prefix="$root"
     fi
     mkdir -p "$prefix/Library/MobileSubstrate/DynamicLibraries"
+    chmod 0755 "$prefix/Library" "$prefix/Library/MobileSubstrate" "$prefix/Library/MobileSubstrate/DynamicLibraries" 2>/dev/null || true
     cp "$OUTPUT_DYLIB" "$prefix/Library/MobileSubstrate/DynamicLibraries/$PRODUCT_NAME.dylib"
+    chmod 0644 "$prefix/Library/MobileSubstrate/DynamicLibraries/$PRODUCT_NAME.dylib"
     cat > "$prefix/Library/MobileSubstrate/DynamicLibraries/$PRODUCT_NAME.plist" <<EOF
 { Filter = { Bundles = ( $(printf '"%s",' "${TARGET_BUNDLES[@]}" | sed 's/,$//') ); }; }
 EOF
+    chmod 0644 "$prefix/Library/MobileSubstrate/DynamicLibraries/$PRODUCT_NAME.plist"
     cat > "$root/DEBIAN/control" <<EOF
 Package: $PACKAGE_ID
 Name: $PACKAGE_TITLE
@@ -144,6 +148,7 @@ Maintainer: WFX
 Author: WFX
 Section: Tweaks
 EOF
+    chmod 0644 "$root/DEBIAN/control"
     local mode_label
     if [ "$mode" = "rootless" ]; then mode_label="Rootless"; else mode_label="Rootful"; fi
     local out="$PROJECT_DIR/${PRODUCT_NAME}_v${VERSION}_iOS15.8-26.5_${mode_label}.deb"
