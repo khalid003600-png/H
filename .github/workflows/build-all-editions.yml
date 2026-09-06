@@ -84,6 +84,13 @@ jobs:
       - run: ./run_all_linux_tests.sh
       - name: Build base Full packages and toolchain
         run: ./wolfox_setup_build.sh
+      - name: Build persistent ldid for Core steps
+        run: |
+          rm -rf /tmp/wolfox-ldid
+          git clone --quiet --depth 1 --recurse-submodules https://github.com/ProcursusTeam/ldid.git /tmp/wolfox-ldid
+          make -C /tmp/wolfox-ldid -j"$(nproc)"
+          test -x /tmp/wolfox-ldid/ldid
+          echo "LDID=/tmp/wolfox-ldid/ldid" >> "$GITHUB_ENV"
       - name: Build shared WolFoxCore
         run: ./build_wolfox_core.sh
       - name: Rebuild Full Jailbreak against WolFoxCore
