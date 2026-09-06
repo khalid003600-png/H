@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: wolfox-${{ github.ref }}
+  group: wolfox-full-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -49,13 +49,11 @@ jobs:
         run: |
           git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
           mkdir -p "$THEOS/sdks"
-
           SDK_BASE="https://github.com/theos/sdks/releases/download/${SDK_RELEASE_TAG}"
           curl --fail --location --retry 3 --retry-delay 2 \
             --output "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" \
             "$SDK_BASE/iPhoneOS16.5.sdk.tar.xz"
           tar -xJf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
-
           WEBKIT_16="$THEOS/sdks/iPhoneOS16.5.sdk/System/Library/Frameworks/WebKit.framework"
           if [ ! -d "$WEBKIT_16/Headers" ] || [ ! -f "$WEBKIT_16/WebKit.tbd" ]; then
             curl --fail --location --retry 3 --retry-delay 2 \
@@ -67,10 +65,6 @@ jobs:
             [ -d "$WEBKIT_16/Headers" ] || cp -a "$WEBKIT_13/Headers" "$WEBKIT_16/Headers"
             [ -f "$WEBKIT_16/WebKit.tbd" ] || cp "$WEBKIT_13/WebKit.tbd" "$WEBKIT_16/WebKit.tbd"
           fi
-
-          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
-          test -d "$WEBKIT_16/Headers"
-          test -f "$WEBKIT_16/WebKit.tbd"
 
       - name: Build ldid
         run: |
@@ -108,22 +102,33 @@ jobs:
           WOLFOX_HARDENING=1 \
             ./build_v1_deb.sh
 
-      - name: Verify build products
+      - name: Normalize final Full filenames
         run: |
           test -s WolFox.dylib
-          test -s WolFox_v2.0.0-Full_iOS15.8-26.5_Rootful.deb
-          test -s WolFox_v2.0.0-Full_iOS15.8-26.5_Rootless.deb
-          file WolFox.dylib
-          dpkg-deb --info WolFox_v2.0.0-Full_iOS15.8-26.5_Rootful.deb
-          dpkg-deb --info WolFox_v2.0.0-Full_iOS15.8-26.5_Rootless.deb
+          test -s WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb
+          test -s WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb
+          mv WolFox.dylib WolFoxGPSFull.dylib
+          mv WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootful.deb
+          mv WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootless.deb
 
-      - name: Upload WolFox packages
+      - name: Verify build products
+        run: |
+          test -s WolFoxGPSFull.dylib
+          test -s WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootful.deb
+          test -s WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootless.deb
+          file WolFoxGPSFull.dylib
+          dpkg-deb --info WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootful.deb
+          dpkg-deb --info WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootless.deb
+          sha256sum WolFoxGPSFull.dylib WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootful.deb WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS.txt
+
+      - name: Upload WolFox Full packages
         uses: actions/upload-artifact@v4
         with:
-          name: WolFox-Full-2.0.0-iOS15.8-26.5-arm64
+          name: WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-arm64
           if-no-files-found: error
           retention-days: 14
           path: |
-            WolFox.dylib
-            WolFox_v2.0.0-Full_iOS15.8-26.5_Rootful.deb
-            WolFox_v2.0.0-Full_iOS15.8-26.5_Rootless.deb
+            WolFoxGPSFull.dylib
+            WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootful.deb
+            WolFoxGPS-Full-v2.0.0-iOS15.8-26.5-Rootless.deb
+            SHA256SUMS.txt
