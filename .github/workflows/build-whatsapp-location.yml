@@ -1,4 +1,5 @@
 name: Build WolFox WhatsApp Location
+# Dedicated DEB + dylib build for the WhatsApp-only edition.
 
 on:
   workflow_dispatch:
