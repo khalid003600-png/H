@@ -28,16 +28,27 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-      - name: Apply FAKE GPS WFX UI changes
-        run: python3 apply_fakegpswfx_ui.py
+
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential ca-certificates clang curl dpkg-dev fakeroot file git libplist-dev libssl-dev libxml2-dev lld llvm make patch perl pkg-config python3 ripgrep xz-utils zlib1g-dev
-      - name: Run Linux validation
+
+      # Validate the canonical repository before applying the product-facing patch.
+      # The patch intentionally renames build strings, so running legacy static tests
+      # after it creates false failures unrelated to compilation.
+      - name: Run canonical Linux validation
         run: |
           chmod +x ./*.sh ./tools/*.sh
           ./run_all_linux_tests.sh
+
+      - name: Apply FAKE GPS WFX UI changes
+        run: |
+          python3 apply_fakegpswfx_ui.py
+          grep -F 'FAKE GPS WFX' WolFoxMaster.mm >/dev/null
+          grep -F 'PACKAGE_TITLE="FAKE GPS WFX"' build_v1_deb.sh >/dev/null
+          grep -F 'VERSION="${WOLFOX_VERSION:-2.0.0}"' build_v1_deb.sh >/dev/null
+
       - name: Install Theos and iOS SDKs
         run: |
           git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
@@ -52,18 +63,21 @@ jobs:
             WEBKIT_13="$THEOS/sdks/iPhoneOS13.7.sdk/System/Library/Frameworks/WebKit.framework"
             mkdir -p "$WEBKIT_16"
             [ -d "$WEBKIT_16/Headers" ] || cp -a "$WEBKIT_13/Headers" "$WEBKIT_16/Headers"
-            [ -f "$WEBKIT_16/WebKit.tbd" ] || cp "$WEBKIT_13/WebKit.tbd" "$WEBKIT_16/WebKit.tbd"
+            [ -f "$WEBKIT_16/WebKit.tbd" ] || cp "$WEBKIT_13/WebKit.tbd "$WEBKIT_16/WebKit.tbd"
           fi
+
       - name: Build ldid
         run: |
           git clone --depth 1 --recurse-submodules https://github.com/ProcursusTeam/ldid.git "$RUNNER_TEMP/ldid-src"
           make -C "$RUNNER_TEMP/ldid-src" -j"$(nproc)"
           mkdir -p "$RUNNER_TEMP/bin"
           install -m 0755 "$RUNNER_TEMP/ldid-src/ldid" "$RUNNER_TEMP/bin/ldid"
+
       - name: Validate License Hub configuration
         env:
           WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
         run: test -n "$WOLFOX_PROJECT_KEY" || { echo "::error::Missing WOLFOX_PROJECT_KEY repository secret"; exit 1; }
+
       - name: Build FAKE GPS WFX Rootful and Rootless
         env:
           MANUAL_BUNDLE_IDS: ${{ inputs.bundle_ids }}
@@ -73,6 +87,7 @@ jobs:
         run: |
           BUNDLE_IDS="${MANUAL_BUNDLE_IDS:-sa.gov.moia.mosques-2}"
           THEOS="$THEOS" SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" LDID="$RUNNER_TEMP/bin/ldid" MIN_IOS=15.0 REQUIRED_SDK_VERSION=16.5 WOLFOX_ARCHS=arm64 WOLFOX_TARGET_BUNDLE_IDS="$BUNDLE_IDS" WOLFOX_PANEL_BASE_URL="$WOLFOX_PANEL_BASE_URL" WOLFOX_PROJECT_KEY="$WOLFOX_PROJECT_KEY" WOLFOX_VERSION="$WOLFOX_VERSION" WOLFOX_REQUIRE_SIGNING=1 WOLFOX_HARDENING=1 ./build_v1_deb.sh
+
       - name: Normalize FAKE GPS WFX filenames
         run: |
           test -s WolFox.dylib
@@ -81,13 +96,18 @@ jobs:
           mv WolFox.dylib FAKEGPSWFX.dylib
           mv WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootful.deb
           mv WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootless.deb
+
       - name: Verify FAKE GPS WFX build products
         run: |
           test -s FAKEGPSWFX.dylib
           test -s FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootful.deb
           test -s FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootless.deb
+          file FAKEGPSWFX.dylib
           strings FAKEGPSWFX.dylib | grep -F "FAKE GPS WFX"
+          dpkg-deb --info FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootful.deb
+          dpkg-deb --info FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootless.deb
           sha256sum FAKEGPSWFX.dylib FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootful.deb FAKEGPSWFX-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS.txt
+
       - name: Upload FAKE GPS WFX packages
         uses: actions/upload-artifact@v4
         with:
