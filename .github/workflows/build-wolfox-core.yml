@@ -7,6 +7,7 @@ on:
     paths:
       - '06_WolFox_Framework_Core/**'
       - 'build_wolfox_core.sh'
+      - 'package_wolfox_core.sh'
       - '.github/workflows/build-wolfox-core.yml'
       - 'WFLicenseClient.*'
       - 'WolFoxProStore.*'
@@ -30,7 +31,7 @@ env:
 
 jobs:
   build:
-    name: WolFoxCore 1.0.0
+    name: WolFoxCore 1.0.0 (dylib + Rootful + Rootless)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -41,7 +42,7 @@ jobs:
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
             build-essential ca-certificates clang curl git libplist-dev libssl-dev lld llvm \
-            make pkg-config unzip wget xz-utils zlib1g-dev
+            make pkg-config unzip wget xz-utils zlib1g-dev dpkg-dev
 
       - name: Install Theos and SDK
         run: |
@@ -64,14 +65,21 @@ jobs:
           LDID: /tmp/ldid/ldid
           MIN_IOS: 15.0
         run: |
-          chmod +x build_wolfox_core.sh
+          chmod +x build_wolfox_core.sh package_wolfox_core.sh
           ./build_wolfox_core.sh
+          ./package_wolfox_core.sh
 
       - name: Verify
         run: |
           test -s WolFoxCore.dylib
+          test -s WolFoxCore-v1.0.0-Rootful.deb
+          test -s WolFoxCore-v1.0.0-Rootless.deb
           file WolFoxCore.dylib
-          cat SHA256SUMS-WolFoxCore.txt
+          dpkg-deb --info WolFoxCore-v1.0.0-Rootful.deb >/dev/null
+          dpkg-deb --info WolFoxCore-v1.0.0-Rootless.deb >/dev/null
+          dpkg-deb --contents WolFoxCore-v1.0.0-Rootful.deb | grep '/usr/lib/WolFox/WolFoxCore.dylib'
+          dpkg-deb --contents WolFoxCore-v1.0.0-Rootless.deb | grep '/var/jb/usr/lib/WolFox/WolFoxCore.dylib'
+          sha256sum -c SHA256SUMS-WolFoxCore.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -80,6 +88,8 @@ jobs:
           retention-days: 90
           path: |
             WolFoxCore.dylib
+            WolFoxCore-v1.0.0-Rootful.deb
+            WolFoxCore-v1.0.0-Rootless.deb
             SHA256SUMS-WolFoxCore.txt
             06_WolFox_Framework_Core/WolFoxCore.h
             06_WolFox_Framework_Core/README_AR.md
