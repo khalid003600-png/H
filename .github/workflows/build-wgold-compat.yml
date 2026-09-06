@@ -1,0 +1,54 @@
+name: Build WGold Compat
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'wgold/**'
+      - 'build_wgold_compat.sh'
+      - '.github/workflows/build-wgold-compat.yml'
+
+permissions:
+  contents: read
+
+env:
+  WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: chmod +x ./*.sh tools/*.sh
+      - name: Prepare iOS toolchain
+        run: ./wolfox_setup_build.sh
+      - name: Persist ldid
+        run: |
+          LDID_BIN="$(find /tmp -type f -path '*/ldid/ldid' -perm -111 -print -quit)"
+          test -n "$LDID_BIN"
+          mkdir -p "$HOME/.local/bin"
+          cp "$LDID_BIN" "$HOME/.local/bin/ldid"
+          chmod +x "$HOME/.local/bin/ldid"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "LDID=$HOME/.local/bin/ldid" >> "$GITHUB_ENV"
+      - name: Build WGold compatibility dylib
+        run: ./build_wgold_compat.sh
+      - name: Verify output
+        run: |
+          test -s WGoldCompat.dylib
+          file WGoldCompat.dylib
+          sha256sum -c SHA256SUMS-WGoldCompat.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WGoldCompat-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            WGoldCompat.dylib
+            SHA256SUMS-WGoldCompat.txt
+            wgold/WGoldCompat.mm
