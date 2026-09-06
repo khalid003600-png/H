@@ -7,6 +7,10 @@ on:
         description: "Bundle IDs مفصولة بفاصلة"
         required: false
         default: "sa.gov.moia.mosques-2"
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-all-editions.yml'
 
 permissions:
   contents: read
@@ -15,111 +19,82 @@ concurrency:
   group: wolfox-all-editions-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
+  WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+  WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
+
 jobs:
   lite-jailbreak:
-    name: Lite Jailbreak (Rootful + Rootless)
+    name: Lite Jailbreak 2.0.0 (Rootful + Rootless)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       THEOS: ${{ github.workspace }}/.theos
-      WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
-      WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
-      WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
       WOLFOX_EDITION: Lite
-      WOLFOX_VERSION: 1.8.6-Lite
+      WOLFOX_VERSION: 2.0.0-Lite
     steps:
       - uses: actions/checkout@v4
       - run: chmod +x ./*.sh tools/*.sh
       - run: ./run_all_linux_tests.sh
       - run: ./wolfox_setup_build.sh
-      - run: |
-          test -s WolFoxLite.dylib
-          test -s WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootful.deb
-          test -s WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootless.deb
+      - name: Normalize Lite Jailbreak outputs
+        run: |
+          cp WolFoxLite.dylib WolFoxLiteJailbreak.dylib
+          cp WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootful.deb WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
+          cp WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootless.deb WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
+      - name: Verify Lite Jailbreak outputs
+        run: |
+          test -s WolFoxLiteJailbreak.dylib
+          test -s WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
+          test -s WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
+          file WolFoxLiteJailbreak.dylib
+          dpkg-deb --info WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb >/dev/null
+          dpkg-deb --info WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb >/dev/null
+          sha256sum WolFoxLiteJailbreak.dylib WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS-Lite-Jailbreak.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WolFox-Lite-Jailbreak-${{ github.run_number }}
+          name: WolFox-GPS-Lite-Jailbreak-2.0.0-${{ github.run_number }}
           if-no-files-found: error
           path: |
-            WolFoxLite.dylib
-            WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootful.deb
-            WolFoxLite_v1.8.6-Lite_iOS15.8-26.5_Rootless.deb
+            WolFoxLiteJailbreak.dylib
+            WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
+            WolFoxGPS-Lite-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
+            SHA256SUMS-Lite-Jailbreak.txt
 
   full-jailbreak:
-    name: Full Jailbreak (Rootful + Rootless)
+    name: Full Jailbreak 2.0.0 (Rootful + Rootless)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       THEOS: ${{ github.workspace }}/.theos
-      WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
-      WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
-      WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
       WOLFOX_EDITION: Full
-      WOLFOX_VERSION: 1.8.6-Full
+      WOLFOX_VERSION: 2.0.0-Full
     steps:
       - uses: actions/checkout@v4
       - run: chmod +x ./*.sh tools/*.sh
       - run: ./run_all_linux_tests.sh
       - run: ./wolfox_setup_build.sh
-      - run: |
-          test -s WolFox.dylib
-          test -s WolFox_v1.8.6-Full_iOS15.8-26.5_Rootful.deb
-          test -s WolFox_v1.8.6-Full_iOS15.8-26.5_Rootless.deb
+      - name: Normalize Full Jailbreak outputs
+        run: |
+          cp WolFox.dylib WolFoxFullJailbreak.dylib
+          cp WolFox_v2.0.0-Full_iOS15.8-26.5_Rootful.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
+          cp WolFox_v2.0.0-Full_iOS15.8-26.5_Rootless.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
+      - name: Verify Full Jailbreak outputs
+        run: |
+          test -s WolFoxFullJailbreak.dylib
+          test -s WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
+          test -s WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
+          file WolFoxFullJailbreak.dylib
+          dpkg-deb --info WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb >/dev/null
+          dpkg-deb --info WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb >/dev/null
+          sha256sum WolFoxFullJailbreak.dylib WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS-Full-Jailbreak.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WolFox-Full-Jailbreak-${{ github.run_number }}
+          name: WolFox-GPS-Full-Jailbreak-2.0.0-${{ github.run_number }}
           if-no-files-found: error
           path: |
-            WolFox.dylib
-            WolFox_v1.8.6-Full_iOS15.8-26.5_Rootful.deb
-            WolFox_v1.8.6-Full_iOS15.8-26.5_Rootless.deb
-
-  lite-jailed-prep:
-    name: Lite Jailed / IPA prep
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
-      WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
-      WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
-      WOLFOX_EDITION: Lite
-      WOLFOX_VERSION: 1.8.6-Lite
-    steps:
-      - uses: actions/checkout@v4
-      - run: chmod +x ./*.sh tools/*.sh
-      - run: ./run_all_linux_tests.sh
-      - name: Prepare Lite jailed payload
-        run: |
-          mkdir -p dist/lite-jailed
-          cp -a *.m *.mm *.h Makefile* control* dist/lite-jailed/ 2>/dev/null || true
-          printf '%s\n' 'Lite jailed payload prepared. Final IPA signing/injection requires a signed target IPA or macOS signing environment.' > dist/lite-jailed/README.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WolFox-Lite-Jailed-Prep-${{ github.run_number }}
-          path: dist/lite-jailed
-          if-no-files-found: error
-
-  full-jailed-prep:
-    name: Full Jailed / IPA prep
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques-2' }}
-      WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
-      WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
-      WOLFOX_EDITION: Full
-      WOLFOX_VERSION: 1.8.6-Full
-    steps:
-      - uses: actions/checkout@v4
-      - run: chmod +x ./*.sh tools/*.sh
-      - run: ./run_all_linux_tests.sh
-      - name: Prepare Full jailed payload
-        run: |
-          mkdir -p dist/full-jailed
-          cp -a *.m *.mm *.h Makefile* control* dist/full-jailed/ 2>/dev/null || true
-          printf '%s\n' 'Full jailed payload prepared. Final IPA signing/injection requires a signed target IPA or macOS signing environment.' > dist/full-jailed/README.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WolFox-Full-Jailed-Prep-${{ github.run_number }}
-          path: dist/full-jailed
-          if-no-files-found: error
+            WolFoxFullJailbreak.dylib
+            WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
+            WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
+            SHA256SUMS-Full-Jailbreak.txt
