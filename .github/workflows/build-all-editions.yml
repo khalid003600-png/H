@@ -11,6 +11,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-all-editions.yml'
+      - 'build_full_jailbreak_core.sh'
+      - 'build_wolfox_core.sh'
+      - '06_WolFox_Framework_Core/**'
 
 permissions:
   contents: read
@@ -65,40 +68,47 @@ jobs:
             SHA256SUMS-Lite-Jailbreak.txt
 
   full-jailbreak:
-    name: Full Jailbreak 2.0.0 (Rootful + Rootless)
+    name: Full Jailbreak 2.0.0 + WolFoxCore (Rootful + Rootless)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       THEOS: ${{ github.workspace }}/.theos
       WOLFOX_EDITION: Full
       WOLFOX_VERSION: 2.0.0-Full
+      WOLFOX_CORE_VERSION: 1.0.0
     steps:
       - uses: actions/checkout@v4
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: chmod +x ./*.sh tools/*.sh
       - run: ./run_all_linux_tests.sh
-      - run: ./wolfox_setup_build.sh
+      - name: Build base Full packages and toolchain
+        run: ./wolfox_setup_build.sh
+      - name: Build shared WolFoxCore
+        run: ./build_wolfox_core.sh
+      - name: Rebuild Full Jailbreak against WolFoxCore
+        run: ./build_full_jailbreak_core.sh
       - name: Normalize Full Jailbreak outputs
         run: |
-          cp WolFox.dylib WolFoxFullJailbreak.dylib
           cp WolFox_v2.0.0-Full_iOS15.8-26.5_Rootful.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
           cp WolFox_v2.0.0-Full_iOS15.8-26.5_Rootless.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
-      - name: Verify Full Jailbreak outputs
+      - name: Verify Full Jailbreak Core dependency
         run: |
           test -s WolFoxFullJailbreak.dylib
+          test -s WolFoxCore.dylib
           test -s WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
           test -s WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
-          file WolFoxFullJailbreak.dylib
-          dpkg-deb --info WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb >/dev/null
-          dpkg-deb --info WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb >/dev/null
-          sha256sum WolFoxFullJailbreak.dylib WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS-Full-Jailbreak.txt
+          dpkg-deb -f WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb Depends | grep -F 'com.wolfox.core'
+          dpkg-deb -f WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb Depends | grep -F 'com.wolfox.core'
+          file WolFoxFullJailbreak.dylib WolFoxCore.dylib
+          sha256sum WolFoxFullJailbreak.dylib WolFoxCore.dylib WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS-Full-Jailbreak.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WolFox-GPS-Full-Jailbreak-2.0.0-${{ github.run_number }}
+          name: WolFox-GPS-Full-Jailbreak-Core-2.0.0-${{ github.run_number }}
           if-no-files-found: error
           path: |
             WolFoxFullJailbreak.dylib
+            WolFoxCore.dylib
             WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootful.deb
             WolFoxGPS-Full-Jailbreak-v2.0.0-iOS15.8-26.5-Rootless.deb
             SHA256SUMS-Full-Jailbreak.txt
