@@ -54,7 +54,7 @@ for src in "${FILES[@]}"; do
 done
 
 "$CC" -target arm64-apple-ios${MIN_IOS} -isysroot "$SDKROOT" -dynamiclib \
-  -fuse-ld=lld -install_name /usr/lib/WolFox/WolFoxCore.dylib \
+  -fuse-ld=lld -install_name @rpath/WolFoxCore.dylib \
   -Wl,-dead_strip -Wl,-x -Wl,-S -Wl,-undefined,dynamic_lookup \
   -framework Foundation -framework UIKit -framework CoreLocation -framework MapKit \
   -framework Security -lsqlite3 "${OBJS[@]}" -o "$OUT"
