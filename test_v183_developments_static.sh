@@ -52,11 +52,12 @@ assert_contains "$MASTER" "normalizedMapSearchText" "دعم تطبيع نص ال
 assert_contains "$MASTER" "CLGeocoder" "وجود مسار احتياطي للبحث الجغرافي"
 assert_contains "$MASTER" "sin(dLon) * cos(lat2)" "اتجاه المسار محسوب كروياً"
 
-CURRENT_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+-Full' "$CONFIG" | head -n 1)"
-if [ -z "$CURRENT_VERSION" ]; then
+SOURCE_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+-Full' "$CONFIG" | head -n 1)"
+if [ -z "$SOURCE_VERSION" ]; then
     echo "❌ تعذر قراءة رقم الإصدار الحالي"
     exit 1
 fi
-assert_contains "$BUILD_SCRIPT" "$CURRENT_VERSION" "تطابق إصدار المصدر والبناء: $CURRENT_VERSION"
+PACKAGE_VERSION="${SOURCE_VERSION%-Full}"
+assert_contains "$BUILD_SCRIPT" "$PACKAGE_VERSION" "تطابق إصدار المصدر والبناء: $SOURCE_VERSION -> $PACKAGE_VERSION"
 
-echo "✅ اجتازت تطويرات WolFox $CURRENT_VERSION اختبارات الحماية الثابتة."
+echo "✅ اجتازت تطويرات WolFox $SOURCE_VERSION اختبارات الحماية الثابتة."
