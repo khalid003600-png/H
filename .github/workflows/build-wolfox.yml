@@ -1,14 +1,19 @@
 name: Build FAKE GPS WFX Full 2.0.0
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       bundle_ids:
         description: "Comma-separated target app Bundle IDs"
         required: true
         default: "sa.gov.moia.mosques-2"
+  push:
+    branches: [main]
+    paths:
+      - 'WolFoxMaster.mm'
+      - 'build_v1_deb.sh'
+      - 'apply_fakegpswfx_ui.py'
+      - '.github/workflows/build-wolfox.yml'
 
 permissions:
   contents: read
@@ -42,7 +47,6 @@ jobs:
           grep -F 'PACKAGE_TITLE="FAKE GPS WFX"' build_v1_deb.sh >/dev/null
           grep -F 'VERSION="${WOLFOX_VERSION:-2.0.0}"' build_v1_deb.sh >/dev/null
           grep -F 'WOLFOX_ARCHS="${WOLFOX_ARCHS:-arm64}"' build_v1_deb.sh >/dev/null
-          grep -F 'WFVirtualCameraManager.mm' build_v1_deb.sh >/dev/null
 
       - name: Install Theos and iOS SDKs
         run: |
