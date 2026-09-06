@@ -1,4 +1,5 @@
 #import "WGEnvironment.h"
+#import <UIKit/UIKit.h>
 
 @interface WGEnvironment ()
 @property (nonatomic, copy, readwrite) NSString *bundleIdentifier;
