@@ -127,6 +127,8 @@ cat > "$GENERATED_LICENSE_CONFIG" <<EOF
 #define WOLFOX_LICENSE_BASE_URL @"$(escape_objc_string "$PANEL_BASE_URL_VALUE")"
 #define WOLFOX_LICENSE_PROJECT_KEY @"$(escape_objc_string "$PROJECT_KEY_VALUE")"
 #define WOLFOX_LICENSE_PROJECT_BUNDLE_ID @"$(escape_objc_string "$PROJECT_BUNDLE_ID_VALUE")"
+printf '#define WF_TWEAK_VERSION @"%s"\n' "$(escape_objc_string "$VERSION")"
+#define WOLFOX_LICENSE_APP_VERSION @"$(escape_objc_string "$VERSION")"
 EOF
 chmod 0600 "$GENERATED_LICENSE_CONFIG"
 
