@@ -20,6 +20,7 @@ build_pkg() {
 
   rm -rf "$pkgroot"
   mkdir -p "$pkgroot/DEBIAN"
+  chmod 0755 "$pkgroot" "$pkgroot/DEBIAN"
 
   if [ "$mode" = "Rootful" ]; then
     install_dir="$pkgroot/usr/lib/WolFox"
@@ -27,6 +28,7 @@ build_pkg() {
     install_dir="$pkgroot/var/jb/usr/lib/WolFox"
   fi
   mkdir -p "$install_dir"
+  chmod 0755 "$install_dir"
   install -m 0755 "$DYLIB" "$install_dir/WolFoxCore.dylib"
 
   cat > "$pkgroot/DEBIAN/control" <<EOF
@@ -38,6 +40,7 @@ Description: Shared WolFox runtime core for licensing and location services.
 Maintainer: WolFox
 Section: Tweaks
 EOF
+  chmod 0644 "$pkgroot/DEBIAN/control"
 
   "$DPKG_DEB" -Zgzip --root-owner-group -b "$pkgroot" "$out"
   test -s "$out"
