@@ -57,7 +57,7 @@ static void WFInstallEntry(UIViewController *vc) {
     button.autoresizingMask=UIViewAutoresizingFlexibleWidth;
     button.backgroundColor=UIColor.secondarySystemBackgroundColor;
     [button setTitle:@"WolFox WhatsApp Location" forState:UIControlStateNormal];
-    button.contentHorizontalAlignment=UIControlContentHorizontalAlignmentNatural;
+    button.contentHorizontalAlignment=UIControlContentHorizontalAlignmentLeading;
     button.titleLabel.font=[UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
     button.accessibilityLabel=@"WolFox WhatsApp Location";
     [button addAction:[UIAction actionWithHandler:^(__kindof UIAction * _Nonnull action) {
