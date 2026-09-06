@@ -1,6 +1,8 @@
 name: Build WolFox Lite 2.0.0
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -32,28 +34,51 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Install compatibility-check dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ripgrep
+
       - name: Run Full and Lite safety checks
         run: |
           chmod +x ./*.sh tools/*.sh
           ./run_all_linux_tests.sh
+
       - name: Build Lite DEB packages
         run: ./wolfox_setup_build.sh
-      - name: Verify Lite outputs
+
+      - name: Normalize Lite output names
         run: |
           test -s WolFoxLite.dylib
           test -s WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootful.deb
           test -s WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootless.deb
+          mv WolFoxLite.dylib WolFoxGPSLite.dylib
+          mv WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootful.deb WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootful.deb
+          mv WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootless.deb WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootless.deb
+
+      - name: Verify Lite outputs
+        run: |
+          test -s WolFoxGPSLite.dylib
+          test -s WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootful.deb
+          test -s WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootless.deb
+          file WolFoxGPSLite.dylib
+          dpkg-deb --info WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootful.deb
+          dpkg-deb --info WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootless.deb
+          sha256sum \
+            WolFoxGPSLite.dylib \
+            WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootful.deb \
+            WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootless.deb > SHA256SUMS-Lite.txt
+          cat SHA256SUMS-Lite.txt
+
       - name: Upload Lite packages
         uses: actions/upload-artifact@v4
         with:
-          name: WolFox-Lite-2.0.0-iOS15.8-26.5-arm64-${{ github.run_number }}
+          name: WolFox-GPS-Lite-2.0.0-iOS15.8-26.5-arm64-${{ github.run_number }}
           path: |
-            WolFoxLite.dylib
-            WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootful.deb
-            WolFoxLite_v2.0.0-Lite_iOS15.8-26.5_Rootless.deb
+            WolFoxGPSLite.dylib
+            WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootful.deb
+            WolFoxGPS-Lite-v2.0.0-iOS15.8-26.5-Rootless.deb
+            SHA256SUMS-Lite.txt
           if-no-files-found: error
           retention-days: 14
