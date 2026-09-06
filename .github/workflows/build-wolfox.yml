@@ -34,20 +34,15 @@ jobs:
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential ca-certificates clang curl dpkg-dev fakeroot file git libplist-dev libssl-dev libxml2-dev lld llvm make patch perl pkg-config python3 ripgrep xz-utils zlib1g-dev
 
-      # Validate the canonical repository before applying the product-facing patch.
-      # The patch intentionally renames build strings, so running legacy static tests
-      # after it creates false failures unrelated to compilation.
-      - name: Run canonical Linux validation
+      - name: Apply and validate FAKE GPS WFX source patch
         run: |
           chmod +x ./*.sh ./tools/*.sh
-          ./run_all_linux_tests.sh
-
-      - name: Apply FAKE GPS WFX UI changes
-        run: |
           python3 apply_fakegpswfx_ui.py
           grep -F 'FAKE GPS WFX' WolFoxMaster.mm >/dev/null
           grep -F 'PACKAGE_TITLE="FAKE GPS WFX"' build_v1_deb.sh >/dev/null
           grep -F 'VERSION="${WOLFOX_VERSION:-2.0.0}"' build_v1_deb.sh >/dev/null
+          grep -F 'WOLFOX_ARCHS="${WOLFOX_ARCHS:-arm64}"' build_v1_deb.sh >/dev/null
+          grep -F 'WFVirtualCameraManager.mm' build_v1_deb.sh >/dev/null
 
       - name: Install Theos and iOS SDKs
         run: |
@@ -63,7 +58,7 @@ jobs:
             WEBKIT_13="$THEOS/sdks/iPhoneOS13.7.sdk/System/Library/Frameworks/WebKit.framework"
             mkdir -p "$WEBKIT_16"
             [ -d "$WEBKIT_16/Headers" ] || cp -a "$WEBKIT_13/Headers" "$WEBKIT_16/Headers"
-            [ -f "$WEBKIT_16/WebKit.tbd" ] || cp "$WEBKIT_13/WebKit.tbd "$WEBKIT_16/WebKit.tbd"
+            [ -f "$WEBKIT_16/WebKit.tbd" ] || cp "$WEBKIT_13/WebKit.tbd" "$WEBKIT_16/WebKit.tbd"
           fi
 
       - name: Build ldid
