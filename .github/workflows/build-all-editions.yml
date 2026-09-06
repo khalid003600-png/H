@@ -35,6 +35,8 @@ jobs:
       WOLFOX_VERSION: 2.0.0-Lite
     steps:
       - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: chmod +x ./*.sh tools/*.sh
       - run: ./run_all_linux_tests.sh
       - run: ./wolfox_setup_build.sh
@@ -72,6 +74,8 @@ jobs:
       WOLFOX_VERSION: 2.0.0-Full
     steps:
       - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: chmod +x ./*.sh tools/*.sh
       - run: ./run_all_linux_tests.sh
       - run: ./wolfox_setup_build.sh
