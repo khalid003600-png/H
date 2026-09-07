@@ -2769,6 +2769,129 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self showToast:@"تمت إعادة العلامة إلى مكانها الافتراضي"];
 }
 
+- (void)presentMosquesAppControls {
+    UIViewController *sheet = [UIViewController new];
+    sheet.modalPresentationStyle = UIModalPresentationPageSheet;
+    sheet.view.backgroundColor = [WolFoxProTheme surfacePrimary];
+    sheet.preferredContentSize = CGSizeMake(360.0, 390.0);
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(24, 22, 312, 34)];
+    title.text = @"خاص لتطبيق مساجد";
+    title.textAlignment = NSTextAlignmentCenter;
+    title.textColor = [WolFoxProTheme textPrimary];
+    title.font = [WolFoxProTheme fontOfSize:19 weight:UIFontWeightBlack];
+    [sheet.view addSubview:title];
+
+    UIView *line = [[UIView alloc] initWithFrame:CGRectMake(24, 68, 312, 1)];
+    line.backgroundColor = [[WolFoxProTheme textSecondary] colorWithAlphaComponent:0.25];
+    [sheet.view addSubview:line];
+
+    UILabel *(^rowLabel)(NSString *, CGFloat) = ^UILabel *(NSString *text, CGFloat y) {
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(104, y, 232, 44)];
+        label.text = text;
+        label.textAlignment = NSTextAlignmentRight;
+        label.textColor = [WolFoxProTheme textPrimary];
+        label.font = [WolFoxProTheme fontOfSize:15 weight:UIFontWeightBold];
+        [sheet.view addSubview:label];
+        return label;
+    };
+
+    rowLabel(@"تفعيل المعرّف", 80);
+    UISwitch *identifierSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(28, 86, 52, 34)];
+    identifierSwitch.tag = 7302;
+    identifierSwitch.on = [WolFoxProStore shared].validatedActiveIdentifier != nil;
+    identifierSwitch.onTintColor = [WolFoxProTheme success];
+    [sheet.view addSubview:identifierSwitch];
+
+    UITextField *identifierField = [[UITextField alloc] initWithFrame:CGRectMake(24, 132, 312, 48)];
+    identifierField.tag = 7301;
+    identifierField.text = [WolFoxProStore shared].activeIdentifierUUID ?: [WFLicenseClient deviceIdentifier];
+    identifierField.placeholder = @"UUID";
+    identifierField.backgroundColor = [WolFoxProTheme surfaceSecondary];
+    identifierField.textColor = [WolFoxProTheme textPrimary];
+    identifierField.tintColor = [WolFoxProTheme accent];
+    identifierField.textAlignment = NSTextAlignmentCenter;
+    identifierField.font = [WolFoxProTheme fontOfSize:11 weight:UIFontWeightBold];
+    identifierField.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
+    identifierField.autocorrectionType = UITextAutocorrectionTypeNo;
+    identifierField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    identifierField.layer.cornerRadius = 11;
+    identifierField.layer.borderWidth = 1;
+    identifierField.layer.borderColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.28].CGColor;
+    [sheet.view addSubview:identifierField];
+
+    UIView *line2 = [[UIView alloc] initWithFrame:CGRectMake(24, 198, 312, 1)];
+    line2.backgroundColor = [[WolFoxProTheme textSecondary] colorWithAlphaComponent:0.25];
+    [sheet.view addSubview:line2];
+
+    rowLabel(@"تفعيل التصوير", 210);
+    UISwitch *cameraSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(28, 216, 52, 34)];
+    cameraSwitch.tag = 7303;
+    cameraSwitch.on = [WFVirtualCameraManager shared].enabled;
+    cameraSwitch.onTintColor = [WolFoxProTheme success];
+    [sheet.view addSubview:cameraSwitch];
+
+    UIButton *save = [UIButton buttonWithType:UIButtonTypeSystem];
+    save.frame = CGRectMake(24, 282, 312, 52);
+    save.backgroundColor = [WolFoxProTheme success];
+    save.layer.cornerRadius = 13;
+    [save setTitle:@"حفظ" forState:UIControlStateNormal];
+    [save setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    save.titleLabel.font = [WolFoxProTheme fontOfSize:16 weight:UIFontWeightBlack];
+    save.accessibilityLabel = @"حفظ إعدادات تطبيق مساجد";
+    [save addTarget:self action:@selector(saveMosquesAppControls:) forControlEvents:UIControlEventTouchUpInside];
+    [sheet.view addSubview:save];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.frame = CGRectMake(12, 18, 44, 44);
+    if (@available(iOS 13.0, *)) [close setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
+    close.tintColor = [WolFoxProTheme textSecondary];
+    [close addTarget:self action:@selector(closeMosquesAppControls:) forControlEvents:UIControlEventTouchUpInside];
+    [sheet.view addSubview:close];
+
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)closeMosquesAppControls:(__unused UIButton *)sender {
+    [self.presentedViewController dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)saveMosquesAppControls:(UIButton *)sender {
+    UIView *root = sender;
+    while (root.superview) root = root.superview;
+    UITextField *identifierField = (UITextField *)[root viewWithTag:7301];
+    UISwitch *identifierSwitch = (UISwitch *)[root viewWithTag:7302];
+    UISwitch *cameraSwitch = (UISwitch *)[root viewWithTag:7303];
+
+    if (identifierSwitch.isOn) {
+        NSString *raw = [identifierField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+        raw = [raw stringByReplacingOccurrencesOfString:@"urn:uuid:" withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, raw.length)];
+        raw = [[raw stringByReplacingOccurrencesOfString:@"{" withString:@""] stringByReplacingOccurrencesOfString:@"}" withString:@""];
+        NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:raw];
+        if (!uuid || ![[WolFoxProStore shared] activateIdentifierString:uuid.UUIDString]) {
+            [self showToast:@"صيغة UUID غير صحيحة ❌"];
+            return;
+        }
+        identifierField.text = uuid.UUIDString;
+    } else {
+        [[WolFoxProStore shared] deactivateIdentifier];
+    }
+
+    WFVirtualCameraManager *camera = [WFVirtualCameraManager shared];
+    BOOL needsImagePicker = cameraSwitch.isOn && ![camera enableUsingAvailableImage];
+    if (!cameraSwitch.isOn) camera.enabled = NO;
+    [self refreshSpoofHeaderStatus];
+
+    [self.presentedViewController dismissViewControllerAnimated:YES completion:^{
+        if (needsImagePicker) {
+            [self showToast:@"اختر صورة لتفعيل التصوير الافتراضي"];
+            [camera presentImagePickerFromViewController:self];
+        } else {
+            [self showToast:@"✅ تم حفظ إعدادات تطبيق مساجد"];
+        }
+    }];
+}
+
 - (void)setupSettingsPage {
     CGFloat w = _scrollDashboard.bounds.size.width;
     CGFloat cy = 10;
@@ -2848,6 +2971,27 @@ static BOOL WFMasterProcessIsEligible(void) {
                 : [NSString stringWithFormat:@"تم إخفاء العلامة — اضغط زر الصوت %ld مرات لفتح الإعدادات", (long)requiredPresses]];
     }]];
     cy += 210 + 18;
+
+#ifndef WOLFOX_LITE
+    // تحكم سريع خاص بالتطبيق المستهدف: المعرّف الموحّد والكاميرا الافتراضية.
+    secLabel(@"إعدادات تطبيق مساجد", cy);
+    cy += 24;
+    UIView *mosquesCard = newCard(cy, 70);
+    UIButton *mosquesButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    mosquesButton.frame = CGRectMake(12, 8, mosquesCard.bounds.size.width - 24, 50);
+    mosquesButton.backgroundColor = [[WolFoxProTheme success] colorWithAlphaComponent:0.14];
+    mosquesButton.layer.cornerRadius = 14;
+    [mosquesButton setTitle:@"  المعرّف والتصوير لتطبيق مساجد" forState:UIControlStateNormal];
+    [mosquesButton setTitleColor:[WolFoxProTheme success] forState:UIControlStateNormal];
+    mosquesButton.titleLabel.font = [WolFoxProTheme fontOfSize:14 weight:UIFontWeightBold];
+    if (@available(iOS 13.0, *)) [mosquesButton setImage:[UIImage systemImageNamed:@"switch.2"] forState:UIControlStateNormal];
+    mosquesButton.tintColor = [WolFoxProTheme success];
+    mosquesButton.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    mosquesButton.accessibilityLabel = @"فتح إعدادات المعرّف والتصوير لتطبيق مساجد";
+    [mosquesButton addTarget:self action:@selector(presentMosquesAppControls) forControlEvents:UIControlEventTouchUpInside];
+    [mosquesCard addSubview:mosquesButton];
+    cy += 70 + 18;
+#endif
 
 // 4. التنبيهات
     // ════════════════════════════════════════════════════════
