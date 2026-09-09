@@ -6,6 +6,17 @@
 
 NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidChangeNotification";
 
+static NSString *WFNormalizedIdentifierUUIDString(NSString *value) {
+    if (![value isKindOfClass:[NSString class]]) return nil;
+    NSString *raw = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if ([raw.lowercaseString hasPrefix:@"urn:uuid:"]) raw = [raw substringFromIndex:9];
+    if ([raw hasPrefix:@"{"] && [raw hasSuffix:@"}"] && raw.length > 2) {
+        raw = [raw substringWithRange:NSMakeRange(1, raw.length - 2)];
+    }
+    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:raw];
+    return uuid.UUIDString;
+}
+
 @implementation WolFoxProLocation
 - (id)copyWithZone:(NSZone *)zone {
     WolFoxProLocation *copy = [[WolFoxProLocation allocWithZone:zone] init];
@@ -75,7 +86,6 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         if (_db) sqlite3_close(_db);
         sqlite3_open(":memory:", &_db);
     }
-    
     char *err = NULL;
     const char *sql = "CREATE TABLE IF NOT EXISTS locations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, lat REAL, lon REAL, alt REAL);";
     if (sqlite3_exec(_db, sql, NULL, NULL, &err) != SQLITE_OK) {
@@ -168,118 +178,107 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 
 - (void)loadSettings {
     @synchronized(self) {
-    NSUserDefaults *u = [NSUserDefaults standardUserDefaults];
-    if ([u objectForKey:@"WF_PRO_SPOOF_ACT"] == nil) { self.spoofActive = NO; [u setBool:NO forKey:@"WF_PRO_SPOOF_ACT"]; } else { self.spoofActive = [u boolForKey:@"WF_PRO_SPOOF_ACT"]; }
-    // FIXED: routeActive لا يُحفظ بين الجلسات — الـ timer ينتهي مع العملية
-    self.routeActive = NO;
-    if ([u objectForKey:@"WF_PRO_JITTER_ACT"] == nil) {
-        self.jitterActive = WFDefaultJitterEnabled;
-        [u setBool:self.jitterActive forKey:@"WF_PRO_JITTER_ACT"];
-    } else {
-        self.jitterActive = [u boolForKey:@"WF_PRO_JITTER_ACT"];
+        NSUserDefaults *u = [NSUserDefaults standardUserDefaults];
+        if ([u objectForKey:@"WF_PRO_SPOOF_ACT"] == nil) { self.spoofActive = NO; [u setBool:NO forKey:@"WF_PRO_SPOOF_ACT"]; } else { self.spoofActive = [u boolForKey:@"WF_PRO_SPOOF_ACT"]; }
+        self.routeActive = NO;
+        if ([u objectForKey:@"WF_PRO_JITTER_ACT"] == nil) {
+            self.jitterActive = WFDefaultJitterEnabled;
+            [u setBool:self.jitterActive forKey:@"WF_PRO_JITTER_ACT"];
+        } else self.jitterActive = [u boolForKey:@"WF_PRO_JITTER_ACT"];
+        self.volumeGestureEnabled = [u objectForKey:@"WF_PRO_VOLUME_GESTURE"] == nil ? YES : [u boolForKey:@"WF_PRO_VOLUME_GESTURE"];
+        self.themeIndex = 0; [u setInteger:0 forKey:@"WF_PRO_THEME_IDX"];
+        self.mapStyle = [u integerForKey:@"WF_PRO_MAP_STYLE"];
+        double savedSpeed = [u objectForKey:@"WF_PRO_SIM_SPEED"] ? [u doubleForKey:@"WF_PRO_SIM_SPEED"] : WFDefaultSimulationSpeedKmh;
+        self.simSpeed = WFClampSimulationSpeed(savedSpeed);
+        double savedInterval = [u objectForKey:@"WF_PRO_UPDATE_INTERVAL"] ? [u doubleForKey:@"WF_PRO_UPDATE_INTERVAL"] : WFDefaultGPSUpdateIntervalSeconds;
+        self.updateIntervalSeconds = WFClampGPSUpdateInterval(savedInterval);
+        NSNumber *savedLatitude = [u objectForKey:@"WF_PRO_LAT"];
+        NSNumber *savedLongitude = [u objectForKey:@"WF_PRO_LON"];
+        if ([savedLatitude isKindOfClass:NSNumber.class] && [savedLongitude isKindOfClass:NSNumber.class]) self.currentFakeCoords = CLLocationCoordinate2DMake(savedLatitude.doubleValue, savedLongitude.doubleValue);
+        else self.currentFakeCoords = CLLocationCoordinate2DMake(24.7136, 46.6753);
+        if (!CLLocationCoordinate2DIsValid(self.currentFakeCoords)) self.currentFakeCoords = CLLocationCoordinate2DMake(24.7136, 46.6753);
+        NSNumber *savedTargetLat = [u objectForKey:@"WF_PRO_TARGET_LAT"];
+        NSNumber *savedTargetLon = [u objectForKey:@"WF_PRO_TARGET_LON"];
+        if ([savedTargetLat isKindOfClass:NSNumber.class] && [savedTargetLon isKindOfClass:NSNumber.class]) self.targetRouteCoords = CLLocationCoordinate2DMake(savedTargetLat.doubleValue, savedTargetLon.doubleValue);
+        self.spoofedImagePath = [u stringForKey:@"WF_PRO_CAM_IMG"];
+        self.mediaUploadActive = [u boolForKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
+        id rememberCameraValue = [u objectForKey:@"WF_PRO_CAM_REMEMBER"];
+        self.rememberCameraImage = rememberCameraValue ? [u boolForKey:@"WF_PRO_CAM_REMEMBER"] : self.spoofedImagePath.length > 0;
+        if (!rememberCameraValue) [u setBool:self.rememberCameraImage forKey:@"WF_PRO_CAM_REMEMBER"];
+        self.scheduleEnabled = [u boolForKey:@"WF_PRO_SCHEDULE_ENABLED"];
+        NSArray *rawDays = [u arrayForKey:@"WF_PRO_SCHEDULE_DAYS"] ?: @[];
+        NSMutableArray<NSNumber *> *validDays = [NSMutableArray new];
+        for (id value in rawDays) { NSInteger day = [value integerValue]; if (day >= 1 && day <= 7 && ![validDays containsObject:@(day)]) [validDays addObject:@(day)]; }
+        self.scheduleWeekdays = validDays;
+        NSInteger startMinutes = [u integerForKey:@"WF_PRO_SCHEDULE_START"];
+        NSInteger endMinutes = [u integerForKey:@"WF_PRO_SCHEDULE_END"];
+        self.scheduleStartMinutes = (startMinutes >= 0 && startMinutes < 1440) ? startMinutes : 540;
+        self.scheduleEndMinutes = (endMinutes >= 0 && endMinutes < 1440) ? endMinutes : 1020;
+        self.scheduleLocationID = [[u objectForKey:@"WF_PRO_SCHEDULE_LOCATION_ID"] longLongValue];
+        self.scheduleApplied = [u boolForKey:@"WF_PRO_SCHEDULE_APPLIED"];
+        self.scheduleDraftDirty = [u boolForKey:@"WF_PRO_SCHEDULE_DRAFT_DIRTY"];
+        BOOL hasCommittedSchedule = [u boolForKey:@"WF_PRO_SCHEDULE_COMMITTED_V1"];
+        if (hasCommittedSchedule) {
+            self.committedScheduleEnabled = [u boolForKey:@"WF_PRO_SCHEDULE_COMMITTED_ENABLED"];
+            self.committedScheduleWeekdays = [u arrayForKey:@"WF_PRO_SCHEDULE_COMMITTED_DAYS"] ?: @[];
+            NSInteger committedStart = [u integerForKey:@"WF_PRO_SCHEDULE_COMMITTED_START"];
+            NSInteger committedEnd = [u integerForKey:@"WF_PRO_SCHEDULE_COMMITTED_END"];
+            self.committedScheduleStartMinutes = (committedStart >= 0 && committedStart < 1440) ? committedStart : 540;
+            self.committedScheduleEndMinutes = (committedEnd >= 0 && committedEnd < 1440) ? committedEnd : 1020;
+            self.committedScheduleLocationID = [[u objectForKey:@"WF_PRO_SCHEDULE_COMMITTED_LOCATION_ID"] longLongValue];
+        } else {
+            self.committedScheduleEnabled = self.scheduleEnabled;
+            self.committedScheduleWeekdays = self.scheduleWeekdays ?: @[];
+            self.committedScheduleStartMinutes = self.scheduleStartMinutes;
+            self.committedScheduleEndMinutes = self.scheduleEndMinutes;
+            self.committedScheduleLocationID = self.scheduleLocationID;
+            self.scheduleDraftDirty = NO;
+        }
+        if (self.spoofedImagePath.length && ![[NSFileManager defaultManager] fileExistsAtPath:self.spoofedImagePath]) {
+            self.spoofedImagePath = nil; self.mediaUploadActive = NO; [u removeObjectForKey:@"WF_PRO_CAM_IMG"]; [u setBool:NO forKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
+        }
+
+        _mutableIdentifiers = [NSMutableArray new];
+        NSMutableSet<NSString *> *seenIdentifierUUIDs = [NSMutableSet set];
+        NSArray *ids = [u arrayForKey:@"WF_PRO_IDS"] ?: @[];
+        for (id rawIdentifier in ids) {
+            if (![rawIdentifier isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary *d = (NSDictionary *)rawIdentifier;
+            NSString *uuidValue = [d[@"uuid"] isKindOfClass:[NSString class]] ? d[@"uuid"] : nil;
+            NSString *normalizedUUID = WFNormalizedIdentifierUUIDString(uuidValue);
+            if (!normalizedUUID || [seenIdentifierUUIDs containsObject:normalizedUUID.lowercaseString]) continue;
+            WolFoxProIdentifier *i = [WolFoxProIdentifier new];
+            i.uuid = normalizedUUID;
+            NSString *rawName = [d[@"name"] isKindOfClass:[NSString class]] ? d[@"name"] : @"";
+            NSString *trimmedName = [rawName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            i.name = trimmedName.length ? trimmedName : @"هوية محفوظة";
+            id dateValue = d[@"date"];
+            NSTimeInterval timestamp = [dateValue respondsToSelector:@selector(doubleValue)] ? [dateValue doubleValue] : NSDate.date.timeIntervalSince1970;
+            i.createdAt = [NSDate dateWithTimeIntervalSince1970:timestamp];
+            [seenIdentifierUUIDs addObject:i.uuid.lowercaseString];
+            [_mutableIdentifiers addObject:i];
+            if (_mutableIdentifiers.count >= 50) break;
+        }
+        NSString *normalizedActiveUUID = WFNormalizedIdentifierUUIDString([u stringForKey:@"WF_PRO_ACTIVE_ID"]);
+        self.activeIdentifierUUID = normalizedActiveUUID;
+        if (normalizedActiveUUID && ![seenIdentifierUUIDs containsObject:normalizedActiveUUID.lowercaseString]) self.activeIdentifierUUID = nil;
+        if (!self.activeIdentifierUUID.length) [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
+
+        self.bluetoothActive = [u boolForKey:@"WF_PRO_BT_ACT"];
+        self.activeBleProfileID = [u stringForKey:@"WF_PRO_BT_ACTIVE_ID"];
+        NSArray *rawProfiles = [u arrayForKey:@"WF_PRO_BT_PROFILES"] ?: @[];
+        self.savedBleProfiles = [NSMutableArray new];
+        for (NSDictionary *d in rawProfiles) {
+            if (![d isKindOfClass:[NSDictionary class]]) continue;
+            WolFoxBleProfile *p = [WolFoxBleProfile new];
+            p.profileID = d[@"profileID"] ?: [[NSUUID UUID] UUIDString];
+            p.name = d[@"name"] ?: @"جهاز غير معروف";
+            p.uuid = d[@"uuid"] ?: @"";
+            p.localName = d[@"localName"] ?: @"";
+            p.rssi = [d[@"rssi"] integerValue];
+            [self.savedBleProfiles addObject:p];
+        }
     }
-    self.volumeGestureEnabled = [u objectForKey:@"WF_PRO_VOLUME_GESTURE"] == nil ? YES : [u boolForKey:@"WF_PRO_VOLUME_GESTURE"];
-    // v1.8.4: تثبيت الوضع الليلي الداكن وترحيل أي اختيار فاتح سابق.
-    self.themeIndex = 0;
-    [u setInteger:0 forKey:@"WF_PRO_THEME_IDX"];
-    self.mapStyle = [u integerForKey:@"WF_PRO_MAP_STYLE"];
-    double savedSpeed = [u objectForKey:@"WF_PRO_SIM_SPEED"] ? [u doubleForKey:@"WF_PRO_SIM_SPEED"] : WFDefaultSimulationSpeedKmh;
-    self.simSpeed = WFClampSimulationSpeed(savedSpeed);
-    double savedInterval = [u objectForKey:@"WF_PRO_UPDATE_INTERVAL"] ? [u doubleForKey:@"WF_PRO_UPDATE_INTERVAL"] : WFDefaultGPSUpdateIntervalSeconds;
-    self.updateIntervalSeconds = WFClampGPSUpdateInterval(savedInterval);
-    NSNumber *savedLatitude = [u objectForKey:@"WF_PRO_LAT"];
-    NSNumber *savedLongitude = [u objectForKey:@"WF_PRO_LON"];
-    if ([savedLatitude isKindOfClass:NSNumber.class] && [savedLongitude isKindOfClass:NSNumber.class]) {
-        self.currentFakeCoords = CLLocationCoordinate2DMake(savedLatitude.doubleValue, savedLongitude.doubleValue);
-    } else {
-        self.currentFakeCoords = CLLocationCoordinate2DMake(24.7136, 46.6753);
-    }
-    if (!CLLocationCoordinate2DIsValid(self.currentFakeCoords)) {
-        self.currentFakeCoords = CLLocationCoordinate2DMake(24.7136, 46.6753);
-    }
-    // targetRouteCoords persistence
-    NSNumber *savedTargetLat = [u objectForKey:@"WF_PRO_TARGET_LAT"];
-    NSNumber *savedTargetLon = [u objectForKey:@"WF_PRO_TARGET_LON"];
-    if ([savedTargetLat isKindOfClass:NSNumber.class] && [savedTargetLon isKindOfClass:NSNumber.class]) {
-        self.targetRouteCoords = CLLocationCoordinate2DMake(savedTargetLat.doubleValue, savedTargetLon.doubleValue);
-    }
-    self.spoofedImagePath = [u stringForKey:@"WF_PRO_CAM_IMG"];
-    self.mediaUploadActive = [u boolForKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
-    id rememberCameraValue = [u objectForKey:@"WF_PRO_CAM_REMEMBER"];
-    // ترحيل آمن للإصدارات السابقة: الصورة الموجودة كانت تُحفظ دائماً، فنحافظ عليها مرة واحدة.
-    self.rememberCameraImage = rememberCameraValue ? [u boolForKey:@"WF_PRO_CAM_REMEMBER"]
-                                                   : self.spoofedImagePath.length > 0;
-    if (!rememberCameraValue) [u setBool:self.rememberCameraImage forKey:@"WF_PRO_CAM_REMEMBER"];
-    self.scheduleEnabled = [u boolForKey:@"WF_PRO_SCHEDULE_ENABLED"];
-    NSArray *rawDays = [u arrayForKey:@"WF_PRO_SCHEDULE_DAYS"] ?: @[];
-    NSMutableArray<NSNumber *> *validDays = [NSMutableArray new];
-    for (id value in rawDays) {
-        NSInteger day = [value integerValue];
-        if (day >= 1 && day <= 7 && ![validDays containsObject:@(day)]) [validDays addObject:@(day)];
-    }
-    self.scheduleWeekdays = validDays;
-    NSInteger startMinutes = [u integerForKey:@"WF_PRO_SCHEDULE_START"];
-    NSInteger endMinutes = [u integerForKey:@"WF_PRO_SCHEDULE_END"];
-    self.scheduleStartMinutes = (startMinutes >= 0 && startMinutes < 1440) ? startMinutes : 540;
-    self.scheduleEndMinutes = (endMinutes >= 0 && endMinutes < 1440) ? endMinutes : 1020;
-    self.scheduleLocationID = [[u objectForKey:@"WF_PRO_SCHEDULE_LOCATION_ID"] longLongValue];
-    self.scheduleApplied = [u boolForKey:@"WF_PRO_SCHEDULE_APPLIED"];
-    self.scheduleDraftDirty = [u boolForKey:@"WF_PRO_SCHEDULE_DRAFT_DIRTY"];
-    BOOL hasCommittedSchedule = [u boolForKey:@"WF_PRO_SCHEDULE_COMMITTED_V1"];
-    if (hasCommittedSchedule) {
-        self.committedScheduleEnabled = [u boolForKey:@"WF_PRO_SCHEDULE_COMMITTED_ENABLED"];
-        self.committedScheduleWeekdays = [u arrayForKey:@"WF_PRO_SCHEDULE_COMMITTED_DAYS"] ?: @[];
-        NSInteger committedStart = [u integerForKey:@"WF_PRO_SCHEDULE_COMMITTED_START"];
-        NSInteger committedEnd = [u integerForKey:@"WF_PRO_SCHEDULE_COMMITTED_END"];
-        self.committedScheduleStartMinutes = (committedStart >= 0 && committedStart < 1440) ? committedStart : 540;
-        self.committedScheduleEndMinutes = (committedEnd >= 0 && committedEnd < 1440) ? committedEnd : 1020;
-        self.committedScheduleLocationID = [[u objectForKey:@"WF_PRO_SCHEDULE_COMMITTED_LOCATION_ID"] longLongValue];
-    } else {
-        self.committedScheduleEnabled = self.scheduleEnabled;
-        self.committedScheduleWeekdays = self.scheduleWeekdays ?: @[];
-        self.committedScheduleStartMinutes = self.scheduleStartMinutes;
-        self.committedScheduleEndMinutes = self.scheduleEndMinutes;
-        self.committedScheduleLocationID = self.scheduleLocationID;
-        self.scheduleDraftDirty = NO;
-    }
-    if (self.spoofedImagePath.length && ![[NSFileManager defaultManager] fileExistsAtPath:self.spoofedImagePath]) {
-        self.spoofedImagePath = nil;
-        self.mediaUploadActive = NO;
-        [u removeObjectForKey:@"WF_PRO_CAM_IMG"];
-        [u setBool:NO forKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
-    }
-    
-    // Load Identifiers from Defaults (simulated structured store)
-    _mutableIdentifiers = [NSMutableArray new];
-    NSArray *ids = [u arrayForKey:@"WF_PRO_IDS"] ?: @[];
-    for (NSDictionary *d in ids) {
-        NSUUID *savedUUID = [[NSUUID alloc] initWithUUIDString:d[@"uuid"]];
-        if (!savedUUID) continue;
-        WolFoxProIdentifier *i = [WolFoxProIdentifier new];
-        i.uuid = savedUUID.UUIDString; i.name = d[@"name"];
-        NSString *dateStr = d[@"date"];
-        i.createdAt = dateStr ? [NSDate dateWithTimeIntervalSince1970:[dateStr doubleValue]] : [NSDate date];
-        [_mutableIdentifiers addObject:i];
-    }
-    NSUUID *activeUUID = [[NSUUID alloc] initWithUUIDString:[u stringForKey:@"WF_PRO_ACTIVE_ID"]];
-    self.activeIdentifierUUID = activeUUID.UUIDString;
-    if (!activeUUID) [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
-    
-    self.bluetoothActive = [u boolForKey:@"WF_PRO_BT_ACT"];
-    self.activeBleProfileID = [u stringForKey:@"WF_PRO_BT_ACTIVE_ID"];
-    NSArray *rawProfiles = [u arrayForKey:@"WF_PRO_BT_PROFILES"] ?: @[];
-    self.savedBleProfiles = [NSMutableArray new];
-    for (NSDictionary *d in rawProfiles) {
-        if (![d isKindOfClass:[NSDictionary class]]) continue;
-        WolFoxBleProfile *p = [WolFoxBleProfile new];
-        p.profileID = d[@"profileID"] ?: [[NSUUID UUID] UUIDString];
-        p.name      = d[@"name"] ?: @"جهاز غير معروف";
-        p.uuid      = d[@"uuid"] ?: @"";
-        p.localName = d[@"localName"] ?: @"";
-        p.rssi      = [d[@"rssi"] integerValue];
-        [self.savedBleProfiles addObject:p];
-    }
-    } // @synchronized
 }
 
 - (void)saveSettings {
@@ -291,102 +290,79 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
         [u setInteger:self.themeIndex forKey:@"WF_PRO_THEME_IDX"];
         [u setInteger:self.mapStyle forKey:@"WF_PRO_MAP_STYLE"];
         [u setDouble:self.simSpeed forKey:@"WF_PRO_SIM_SPEED"];
-        [u setDouble:WFClampGPSUpdateInterval(self.updateIntervalSeconds) forKey:@"WF_PRO_UPDATE_INTERVAL"];
+        [u setDouble:self.updateIntervalSeconds forKey:@"WF_PRO_UPDATE_INTERVAL"];
         [u setDouble:self.currentFakeCoords.latitude forKey:@"WF_PRO_LAT"];
         [u setDouble:self.currentFakeCoords.longitude forKey:@"WF_PRO_LON"];
-        [u setDouble:self.targetRouteCoords.latitude forKey:@"WF_PRO_TARGET_LAT"];
-        [u setDouble:self.targetRouteCoords.longitude forKey:@"WF_PRO_TARGET_LON"];
-        if (self.spoofedImagePath) [u setObject:self.spoofedImagePath forKey:@"WF_PRO_CAM_IMG"];
-        else [u removeObjectForKey:@"WF_PRO_CAM_IMG"];
+        if (CLLocationCoordinate2DIsValid(self.targetRouteCoords)) { [u setDouble:self.targetRouteCoords.latitude forKey:@"WF_PRO_TARGET_LAT"]; [u setDouble:self.targetRouteCoords.longitude forKey:@"WF_PRO_TARGET_LON"]; }
         [u setBool:self.mediaUploadActive forKey:@"WF_PRO_MEDIA_UPLOAD_ACTIVE"];
         [u setBool:self.rememberCameraImage forKey:@"WF_PRO_CAM_REMEMBER"];
+        if (self.spoofedImagePath) [u setObject:self.spoofedImagePath forKey:@"WF_PRO_CAM_IMG"]; else [u removeObjectForKey:@"WF_PRO_CAM_IMG"];
         [u setBool:self.scheduleEnabled forKey:@"WF_PRO_SCHEDULE_ENABLED"];
         [u setObject:self.scheduleWeekdays ?: @[] forKey:@"WF_PRO_SCHEDULE_DAYS"];
-        [u setInteger:MAX(0, MIN(1439, self.scheduleStartMinutes)) forKey:@"WF_PRO_SCHEDULE_START"];
-        [u setInteger:MAX(0, MIN(1439, self.scheduleEndMinutes)) forKey:@"WF_PRO_SCHEDULE_END"];
+        [u setInteger:self.scheduleStartMinutes forKey:@"WF_PRO_SCHEDULE_START"];
+        [u setInteger:self.scheduleEndMinutes forKey:@"WF_PRO_SCHEDULE_END"];
         [u setObject:@(self.scheduleLocationID) forKey:@"WF_PRO_SCHEDULE_LOCATION_ID"];
         [u setBool:self.scheduleApplied forKey:@"WF_PRO_SCHEDULE_APPLIED"];
         [u setBool:self.scheduleDraftDirty forKey:@"WF_PRO_SCHEDULE_DRAFT_DIRTY"];
         [u setBool:YES forKey:@"WF_PRO_SCHEDULE_COMMITTED_V1"];
         [u setBool:self.committedScheduleEnabled forKey:@"WF_PRO_SCHEDULE_COMMITTED_ENABLED"];
         [u setObject:self.committedScheduleWeekdays ?: @[] forKey:@"WF_PRO_SCHEDULE_COMMITTED_DAYS"];
-        [u setInteger:MAX(0, MIN(1439, self.committedScheduleStartMinutes)) forKey:@"WF_PRO_SCHEDULE_COMMITTED_START"];
-        [u setInteger:MAX(0, MIN(1439, self.committedScheduleEndMinutes)) forKey:@"WF_PRO_SCHEDULE_COMMITTED_END"];
+        [u setInteger:self.committedScheduleStartMinutes forKey:@"WF_PRO_SCHEDULE_COMMITTED_START"];
+        [u setInteger:self.committedScheduleEndMinutes forKey:@"WF_PRO_SCHEDULE_COMMITTED_END"];
         [u setObject:@(self.committedScheduleLocationID) forKey:@"WF_PRO_SCHEDULE_COMMITTED_LOCATION_ID"];
-        
+
         NSMutableArray *ids = [NSMutableArray new];
         for (WolFoxProIdentifier *i in _mutableIdentifiers) {
-            NSString *dateStr = i.createdAt ? [NSString stringWithFormat:@"%.0f", [(NSDate*)i.createdAt timeIntervalSince1970]] : [NSString stringWithFormat:@"%.0f", [[NSDate date] timeIntervalSince1970]];
-            [ids addObject:@{@"uuid": i.uuid ?: @"", @"name": i.name ?: @"", @"date": dateStr}];
+            if (!i.uuid.length) continue;
+            [ids addObject:@{ @"uuid": i.uuid, @"name": i.name ?: @"هوية محفوظة", @"date": @((i.createdAt ?: NSDate.date).timeIntervalSince1970) }];
+            if (ids.count >= 50) break;
         }
         [u setObject:ids forKey:@"WF_PRO_IDS"];
-        if (self.activeIdentifierUUID) [u setObject:self.activeIdentifierUUID forKey:@"WF_PRO_ACTIVE_ID"];
-        else [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
-        
+        NSString *normalizedActive = WFNormalizedIdentifierUUIDString(self.activeIdentifierUUID);
+        if (normalizedActive) [u setObject:normalizedActive forKey:@"WF_PRO_ACTIVE_ID"]; else [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
         [u setBool:self.bluetoothActive forKey:@"WF_PRO_BT_ACT"];
-        if (self.activeBleProfileID) [u setObject:self.activeBleProfileID forKey:@"WF_PRO_BT_ACTIVE_ID"];
-        else [u removeObjectForKey:@"WF_PRO_BT_ACTIVE_ID"];
-        NSMutableArray *rawProfiles = [NSMutableArray new];
-        for (WolFoxBleProfile *p in self.savedBleProfiles) {
-            [rawProfiles addObject:@{
-                @"profileID": p.profileID ?: @"",
-                @"name":      p.name ?: @"",
-                @"uuid":      p.uuid ?: @"",
-                @"localName": p.localName ?: @"",
-                @"rssi":      @(p.rssi)
-            }];
-        }
-        [u setObject:rawProfiles forKey:@"WF_PRO_BT_PROFILES"];
-        
+        if (self.activeBleProfileID) [u setObject:self.activeBleProfileID forKey:@"WF_PRO_BT_ACTIVE_ID"]; else [u removeObjectForKey:@"WF_PRO_BT_ACTIVE_ID"];
+        NSMutableArray *profiles = [NSMutableArray new];
+        for (WolFoxBleProfile *p in self.savedBleProfiles) [profiles addObject:@{ @"profileID": p.profileID ?: @"", @"name": p.name ?: @"", @"uuid": p.uuid ?: @"", @"localName": p.localName ?: @"", @"rssi": @(p.rssi) }];
+        [u setObject:profiles forKey:@"WF_PRO_BT_PROFILES"];
         [u synchronize];
     }
 }
 
-- (void)commitScheduleDraft {
-    @synchronized(self) {
-        self.committedScheduleEnabled = self.scheduleEnabled;
-        self.committedScheduleWeekdays = self.scheduleWeekdays ?: @[];
-        self.committedScheduleStartMinutes = self.scheduleStartMinutes;
-        self.committedScheduleEndMinutes = self.scheduleEndMinutes;
-        self.committedScheduleLocationID = self.scheduleLocationID;
-        self.scheduleDraftDirty = NO;
-    }
-}
+- (NSArray *)identifiers { return [_mutableIdentifiers copy]; }
 
 - (void)saveIdentifier:(WolFoxProIdentifier *)i {
-    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:i.uuid];
-    if (!uuid) return;
-    i.uuid = uuid.UUIDString;
-    for (WolFoxProIdentifier *existing in [_mutableIdentifiers copy]) {
-        if ([existing.uuid isEqualToString:i.uuid]) [_mutableIdentifiers removeObject:existing];
+    if (!i) return;
+    NSString *normalizedUUID = WFNormalizedIdentifierUUIDString(i.uuid);
+    if (!normalizedUUID) return;
+    WolFoxProIdentifier *safeIdentifier = [i copy];
+    safeIdentifier.uuid = normalizedUUID;
+    NSString *trimmedName = [safeIdentifier.name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    safeIdentifier.name = trimmedName.length ? trimmedName : @"هوية محفوظة";
+    if (!safeIdentifier.createdAt) safeIdentifier.createdAt = NSDate.date;
+    @synchronized(self) {
+        for (WolFoxProIdentifier *existing in [_mutableIdentifiers copy]) if ([existing.uuid caseInsensitiveCompare:safeIdentifier.uuid] == NSOrderedSame) [_mutableIdentifiers removeObject:existing];
+        [_mutableIdentifiers insertObject:safeIdentifier atIndex:0];
+        while (_mutableIdentifiers.count > 50) [_mutableIdentifiers removeLastObject];
     }
-    [_mutableIdentifiers addObject:i];
     [self saveSettings];
 }
 
 - (NSUUID *)validatedActiveIdentifier {
-    NSString *value = self.activeIdentifierUUID;
-    return value.length ? [[NSUUID alloc] initWithUUIDString:value] : nil;
+    NSString *normalized = WFNormalizedIdentifierUUIDString(self.activeIdentifierUUID);
+    return normalized.length ? [[NSUUID alloc] initWithUUIDString:normalized] : nil;
 }
 
 - (BOOL)activateIdentifierString:(NSString *)value {
-    NSString *trimmed = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:trimmed];
-    if (!uuid) return NO;
-    self.activeIdentifierUUID = uuid.UUIDString;
+    NSString *normalizedUUID = WFNormalizedIdentifierUUIDString(value);
+    if (!normalizedUUID) return NO;
+    self.activeIdentifierUUID = normalizedUUID;
     BOOL alreadySaved = NO;
     for (WolFoxProIdentifier *identifier in _mutableIdentifiers) {
-        if ([identifier.uuid isEqualToString:self.activeIdentifierUUID]) {
-            alreadySaved = YES;
-            break;
-        }
+        if ([identifier.uuid caseInsensitiveCompare:self.activeIdentifierUUID] == NSOrderedSame) { alreadySaved = YES; break; }
     }
     if (!alreadySaved) {
-        WolFoxProIdentifier *identifier = [WolFoxProIdentifier new];
-        identifier.uuid = self.activeIdentifierUUID;
-        identifier.name = @"هوية موحدة";
-        identifier.createdAt = [NSDate date];
-        [_mutableIdentifiers addObject:identifier];
+        WolFoxProIdentifier *item = [WolFoxProIdentifier new]; item.uuid = self.activeIdentifierUUID; item.name = @"هوية موحدة"; item.createdAt = [NSDate date]; [_mutableIdentifiers insertObject:item atIndex:0];
     }
     [self saveSettings];
     [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_IDENTIFIER_CHANGED" object:self.activeIdentifierUUID];
@@ -401,79 +377,26 @@ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidCh
 
 - (void)deleteIdentifierUUID:(NSString *)uuid {
     NSUInteger index = [_mutableIdentifiers indexOfObjectPassingTest:^BOOL(WolFoxProIdentifier *i, NSUInteger idx, BOOL *stop) {
-        if (![i.uuid isEqualToString:uuid]) return NO;
-        *stop = YES;
-        return YES;
+        if ([i.uuid caseInsensitiveCompare:uuid] != NSOrderedSame) return NO;
+        *stop = YES; return YES;
     }];
     if (index != NSNotFound) [_mutableIdentifiers removeObjectAtIndex:index];
-    BOOL removedActive = self.activeIdentifierUUID.length && uuid.length &&
-                         [self.activeIdentifierUUID caseInsensitiveCompare:uuid] == NSOrderedSame;
-    if (removedActive) {
-        self.activeIdentifierUUID = nil;
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_IDENTIFIER_CHANGED" object:nil];
-    }
+    if ([self.activeIdentifierUUID caseInsensitiveCompare:uuid] == NSOrderedSame) self.activeIdentifierUUID = nil;
     [self saveSettings];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_IDENTIFIER_CHANGED" object:self.activeIdentifierUUID];
 }
 
-- (NSArray *)identifiers { return [_mutableIdentifiers copy]; }
+- (void)saveBleProfile:(WolFoxBleProfile *)p { if (!p) return; if (!self.savedBleProfiles) self.savedBleProfiles = [NSMutableArray new]; [self.savedBleProfiles addObject:p]; [self saveSettings]; }
+- (void)deleteBleProfileID:(NSString *)profileID { NSUInteger index = [self.savedBleProfiles indexOfObjectPassingTest:^BOOL(WolFoxBleProfile *p, NSUInteger idx, BOOL *stop) { return [p.profileID isEqualToString:profileID]; }]; if (index != NSNotFound) [self.savedBleProfiles removeObjectAtIndex:index]; if ([self.activeBleProfileID isEqualToString:profileID]) { self.activeBleProfileID = nil; self.bluetoothActive = NO; [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_BT_PROFILE_DEACTIVATED" object:nil]; } [self saveSettings]; }
 
-- (void)saveBleProfile:(WolFoxBleProfile *)profile {
-    if (!profile.profileID) profile.profileID = [[NSUUID UUID] UUIDString];
-    @synchronized(self.savedBleProfiles) {
-        for (WolFoxBleProfile *p in [self.savedBleProfiles copy]) {
-            if ([p.profileID isEqualToString:profile.profileID]) {
-                [self.savedBleProfiles removeObject:p]; break;
-            }
-        }
-        [self.savedBleProfiles insertObject:profile atIndex:0];
-    }
-    [self saveSettings];
-}
-
-- (void)deleteBleProfileID:(NSString *)profileID {
-    @synchronized(self.savedBleProfiles) {
-        for (WolFoxBleProfile *p in [self.savedBleProfiles copy]) {
-            if ([p.profileID isEqualToString:profileID]) {
-                [self.savedBleProfiles removeObject:p]; break;
-            }
-        }
-    }
-    // FIXED: إذا حُذف الملف النشط، أوقف تزييف البلوتوث تلقائياً
-    if (profileID.length && self.activeBleProfileID.length &&
-        [self.activeBleProfileID isEqualToString:profileID]) {
-        self.activeBleProfileID = nil;
-        self.bluetoothActive = NO;
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
-    }
-    [self saveSettings];
-}
-
-- (WolFoxBleProfile *)activeBleProfile {
-    NSString *activeID = self.activeBleProfileID;
-    if (!activeID.length) return nil;
-    @synchronized(self.savedBleProfiles) {
-        for (WolFoxBleProfile *profile in self.savedBleProfiles) {
-            if ([profile.profileID isEqualToString:activeID]) return [profile copy];
-        }
-    }
-    return nil;
-}
-
-- (NSString *)mediaStoragePath {
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSString *base = [fm URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject.path;
-    if (!base.length) base = [fm URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject.path;
-    NSString *directory = [base stringByAppendingPathComponent:@"WolFox/Media"];
-    NSError *error = nil;
-    if (![fm createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:&error]) {
-        directory = [NSTemporaryDirectory() stringByAppendingPathComponent:@"WolFoxMedia"];
-        [fm createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
-    }
-    // استخدم bundleID لعزل ملفات الوسائط بين التطبيقات المختلفة
-    NSString *bundleSuffix = [NSBundle mainBundle].bundleIdentifier ?: @"default";
-    NSString *safeBundle = [[bundleSuffix componentsSeparatedByCharactersInSet:
-        [[NSCharacterSet alphanumericCharacterSet] invertedSet]] componentsJoinedByString:@"_"];
-    return [directory stringByAppendingPathComponent:[NSString stringWithFormat:@"wf_spoof_%@.jpg", safeBundle]];
+- (void)commitScheduleDraft {
+    self.committedScheduleEnabled = self.scheduleEnabled;
+    self.committedScheduleWeekdays = self.scheduleWeekdays ?: @[];
+    self.committedScheduleStartMinutes = self.scheduleStartMinutes;
+    self.committedScheduleEndMinutes = self.scheduleEndMinutes;
+    self.committedScheduleLocationID = self.scheduleLocationID;
+    self.scheduleDraftDirty = NO;
+    self.scheduleApplied = NO;
 }
 
 @end
