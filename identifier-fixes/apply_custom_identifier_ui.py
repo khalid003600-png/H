@@ -3,64 +3,44 @@ from pathlib import Path
 path = Path("WolFoxMaster.mm")
 text = path.read_text(encoding="utf-8")
 
-replacements = [
-    (
-        'NSArray *tabLabels = @[@"الموقع GPS", @"معرف الجهاز", @"البلوتوث", @"الكاميرا", @"الإعدادات"];',
-        'NSArray *tabLabels = @[@"الموقع GPS", @"المعرّف المخصص", @"البلوتوث", @"الكاميرا", @"الإعدادات"];',
-    ),
-    (
-        'title.text = @"الهوية الموحدة • IDFA • IDFV • Web";',
-        'title.text = @"المعرّف المخصص للتطبيق";',
-    ),
-    (
-        '    tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: [WFLicenseClient deviceIdentifier];\n    tf.font = [WolFoxProTheme fontOfSize:11 weight:UIFontWeightBold];',
-        '    tf.placeholder = @"UUID مخصص — XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";\n    tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: @"";\n    tf.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;\n    tf.autocorrectionType = UITextAutocorrectionTypeNo;\n    tf.clearButtonMode = UITextFieldViewModeWhileEditing;\n    tf.returnKeyType = UIReturnKeyDone;\n    tf.accessibilityLabel = @"إدخال المعرّف المخصص UUID";\n    tf.font = [WolFoxProTheme fontOfSize:11 weight:UIFontWeightBold];',
-    ),
-    (
-        'UIButton *sav = [self royalBtnInside:idCard t:@"حفظ وتفعيل" i:@"checkmark" c:[WolFoxProTheme success] y:185];',
-        'UIButton *sav = [self royalBtnInside:idCard t:@"إضافة المعرّف المخصص وتفعيله" i:@"checkmark" c:[WolFoxProTheme success] y:185];',
-    ),
-    (
-        'idStatus.text = identifierActive ? @"حالة تزييف المعرّفات: مفعّل" : @"حالة تزييف المعرّفات: متوقف";',
-        'idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓  %@", [WolFoxProStore shared].activeIdentifierUUID ?: @""] : @"لا يوجد معرّف مخصص مفعّل";',
-    ),
+# Ensure the custom identifier section is explicitly exposed in the UI.
+required_ui = [
+    '@"المعرّف المخصص للتطبيق"',
+    '@"إضافة المعرّف المخصص وتفعيله"',
+    'tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: @"";',
 ]
+for marker in required_ui:
+    if marker not in text:
+        raise SystemExit(f"Missing required custom identifier UI marker: {marker}")
 
-for old, new in replacements:
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"Expected exactly one occurrence, found {count}: {old[:100]}")
-    text = text.replace(old, new, 1)
-
-old_save = '''- (void)saveIDProPage {
-    UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
-    NSString *raw = [tf.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
-    raw = [raw stringByReplacingOccurrencesOfString:@"urn:uuid:" withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, raw.length)];
-    raw = [raw stringByReplacingOccurrencesOfString:@"{" withString:@""];
-    raw = [raw stringByReplacingOccurrencesOfString:@"}" withString:@""];
-    NSUUID *normalizedUUID = [[NSUUID alloc] initWithUUIDString:raw];
-    if (normalizedUUID && [[WolFoxProStore shared] activateIdentifierString:normalizedUUID.UUIDString]) {
-        tf.text = [WolFoxProStore shared].activeIdentifierUUID;
-        [self refreshSpoofHeaderStatus];
-        UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
-        status.text = @"حالة تزييف المعرّفات: مفعّل";
-        status.textColor = [WolFoxProTheme success];
-    } else {
-        [self showToast:@"صيغة UUID غير صحيحة ❌"];
-    }
-}
+old_status = '''    UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 440, idCard.bounds.size.width - 30, 28)];
+    BOOL identifierActive = [WolFoxProStore shared].validatedActiveIdentifier != nil;
+    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓  %@", [WolFoxProStore shared].activeIdentifierUUID ?: @""] : @"لا يوجد معرّف مخصص مفعّل";
+    idStatus.textColor = identifierActive ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
+    idStatus.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.10];
+    idStatus.layer.cornerRadius = 10; idStatus.clipsToBounds = YES;
+    idStatus.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightBold];
+    idStatus.textAlignment = NSTextAlignmentCenter;
 '''
+new_status = '''    UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 436, idCard.bounds.size.width - 30, 44)];
+    BOOL identifierActive = [WolFoxProStore shared].validatedActiveIdentifier != nil;
+    NSString *activeIdentifierText = [WolFoxProStore shared].activeIdentifierUUID ?: @"";
+    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓\\n%@", activeIdentifierText] : @"لا يوجد معرّف مخصص مفعّل";
+    idStatus.textColor = identifierActive ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
+    idStatus.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.10];
+    idStatus.layer.cornerRadius = 10; idStatus.clipsToBounds = YES;
+    idStatus.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightBold];
+    idStatus.numberOfLines = 2;
+    idStatus.adjustsFontSizeToFitWidth = YES;
+    idStatus.minimumScaleFactor = 0.75;
+    idStatus.textAlignment = NSTextAlignmentCenter;
+'''
+if old_status in text:
+    text = text.replace(old_status, new_status, 1)
+elif 'activeIdentifierText' not in text:
+    raise SystemExit("Identifier status block is neither original nor hardened")
 
-new_save = '''- (void)saveIDProPage {
-    UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
-    WolFoxProStore *store = [WolFoxProStore shared];
-    NSString *raw = [tf.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
-    if ([raw.lowercaseString hasPrefix:@"urn:uuid:"]) raw = [raw substringFromIndex:9];
-    if ([raw hasPrefix:@"{"] && [raw hasSuffix:@"}"] && raw.length > 2) {
-        raw = [raw substringWithRange:NSMakeRange(1, raw.length - 2)];
-    }
-    NSUUID *normalizedUUID = [[NSUUID alloc] initWithUUIDString:raw];
-    if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
+old_save = '''    if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
         NSString *activeUUID = store.activeIdentifierUUID ?: @"";
         BOOL confirmedSaved = NO;
         for (WolFoxProIdentifier *item in store.identifiers) {
@@ -80,45 +60,49 @@ new_save = '''- (void)saveIDProPage {
         status.textColor = [WolFoxProTheme success];
         [self showToast:@"✅ تم حفظ المعرّف المخصص وتفعيله"];
         [self switchPage:1];
-    } else {
-        [self showToast:@"صيغة UUID غير صحيحة ❌"];
-    }
-}
 '''
-
-if text.count(old_save) != 1:
-    raise SystemExit("saveIDProPage block did not match exactly once")
-text = text.replace(old_save, new_save, 1)
-
-old_reset = '''        NSString *orig = [WFLicenseClient deviceIdentifier];
-        UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
-        tf.text = orig; [[WolFoxProStore shared] deactivateIdentifier]; [self refreshSpoofHeaderStatus];
-        UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
-        status.text = @"حالة تزييف المعرّفات: متوقف";
-        status.textColor = [WolFoxProTheme textSecondary];'''
-new_reset = '''        UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
-        tf.text = @"";
-        [[WolFoxProStore shared] deactivateIdentifier];
+new_save = '''    if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
+        NSString *expectedUUID = normalizedUUID.UUIDString;
+        NSString *activeUUID = store.activeIdentifierUUID ?: @"";
+        BOOL activeMatchesExpected = [activeUUID caseInsensitiveCompare:expectedUUID] == NSOrderedSame;
+        BOOL confirmedSaved = NO;
+        for (WolFoxProIdentifier *item in store.identifiers) {
+            if ([item.uuid caseInsensitiveCompare:expectedUUID] == NSOrderedSame) {
+                confirmedSaved = YES;
+                break;
+            }
+        }
+        if (!activeMatchesExpected || !confirmedSaved || ![store validatedActiveIdentifier]) {
+            [self showToast:@"تعذر تأكيد حفظ وتفعيل المعرّف المخصص ❌"];
+            return;
+        }
+        tf.text = activeUUID;
         [self refreshSpoofHeaderStatus];
         UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
-        status.text = @"لا يوجد معرّف مخصص مفعّل";
-        status.textColor = [WolFoxProTheme textSecondary];
-        [self showToast:@"✅ تم إيقاف المعرّف المخصص والعودة للأصلي"];'''
-if text.count(old_reset) != 1:
-    raise SystemExit("resetIDProPage block did not match exactly once")
-text = text.replace(old_reset, new_reset, 1)
+        status.text = [NSString stringWithFormat:@"تمت الإضافة والتفعيل ✓\\n%@", activeUUID];
+        status.numberOfLines = 2;
+        status.textColor = [WolFoxProTheme success];
+        [self showToast:@"✅ تم التحقق: المعرّف محفوظ ومفعّل"];
+        [self switchPage:1];
+'''
+if old_save in text:
+    text = text.replace(old_save, new_save, 1)
+elif 'activeMatchesExpected' not in text:
+    raise SystemExit("Identifier save confirmation block is neither original nor hardened")
 
-required = [
+# Final verification: the UI must expose the field, and success must only be shown
+# after the entered UUID is the active UUID and is present in the saved list.
+required_final = [
+    'activeIdentifierText',
+    'activeMatchesExpected',
+    '@"✅ تم التحقق: المعرّف محفوظ ومفعّل"',
+    'status.numberOfLines = 2;',
     '@"المعرّف المخصص للتطبيق"',
     '@"إضافة المعرّف المخصص وتفعيله"',
-    'BOOL confirmedSaved = NO;',
-    '@"✅ تم حفظ المعرّف المخصص وتفعيله"',
-    'tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: @"";',
-    'store.identifiers',
 ]
-for marker in required:
+for marker in required_final:
     if marker not in text:
-        raise SystemExit(f"Missing expected marker after patch: {marker}")
+        raise SystemExit(f"Missing final identifier confirmation marker: {marker}")
 
 path.write_text(text, encoding="utf-8")
-print("Custom identifier UI patch applied and verified")
+print("Custom identifier section hardened and verified")
