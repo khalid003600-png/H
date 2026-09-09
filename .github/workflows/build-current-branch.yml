@@ -45,3 +45,5 @@ jobs:
           name: WolFox-Branch-${{ github.run_id }}
           path: artifacts/
           if-no-files-found: error
+
+# manual-build-trigger: 2026-09-09T14:30+03:00
