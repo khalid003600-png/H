@@ -1,0 +1,39 @@
+name: Build K7GPS Standalone
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/k7gps-motion-standalone]
+    paths: ['K7GPS/**','.github/workflows/build-k7gps-standalone.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+      SDK_RELEASE_TAG: master-146e41f
+      K7GPS_VARIANT: motion
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang curl dpkg-dev lld xz-utils git ca-certificates
+      - name: Install Theos and SDK
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" "https://github.com/theos/sdks/releases/download/${SDK_RELEASE_TAG}/iPhoneOS16.5.sdk.tar.xz"
+          tar -xJf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
+      - name: Build
+        run: |
+          chmod +x K7GPS/build_k7gps_deb.sh
+          THEOS="$THEOS" SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" K7GPS_VARIANT="$K7GPS_VARIANT" K7GPS_VERSION=1.0.0 ./K7GPS/build_k7gps_deb.sh
+      - name: Collect
+        run: |
+          mkdir -p artifacts
+          cp K7GPS.dylib K7GPS-*.deb K7GPS-SHA256SUMS.txt artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: K7GPS-motion-standalone
+          path: artifacts/
+          if-no-files-found: error
