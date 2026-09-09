@@ -76,3 +76,6 @@ void WFLogEvent(NSString *event, NSDictionary<NSString *, id> *fields) {
     NSString *line = [NSString stringWithFormat:@"%@ %@", safeEvent, safeFields];
     os_log_with_type(WFLogger(), OS_LOG_TYPE_DEFAULT, "%{public}s", line.UTF8String);
 }
+
+// التحسينات العربية الإضافية لنسختي فل ولايت. لا تغيّر التصميم الأساسي.
+#import "WolFoxArabicEnhancements.inc"
