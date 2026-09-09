@@ -65,3 +65,5 @@ jobs:
           name: WolFox-UUID-Build
           path: artifacts/
           if-no-files-found: warn
+
+# trigger: rebuild uuid dylib
