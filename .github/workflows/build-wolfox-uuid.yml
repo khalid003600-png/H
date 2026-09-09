@@ -9,6 +9,7 @@ on:
       - 'WolFoxProStore.m'
       - 'WolFoxIntegrated.mm'
       - 'build_v1_deb.sh'
+      - 'identifier-fixes/WolFoxIdentifierFix.patch'
       - '.github/workflows/build-wolfox-uuid.yml'
 
 permissions:
@@ -23,6 +24,11 @@ jobs:
       SDK_RELEASE_TAG: "master-146e41f"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Apply identifier fixes
+        run: |
+          git apply --check identifier-fixes/WolFoxIdentifierFix.patch
+          git apply identifier-fixes/WolFoxIdentifierFix.patch
 
       - name: Install build dependencies
         run: |
@@ -44,6 +50,8 @@ jobs:
           grep -F 'NSUUID' WolFoxMaster.mm >/dev/null
           grep -F 'WF_PRO_IDS' WolFoxProStore.m >/dev/null
           grep -F 'WF_PRO_ACTIVE_ID' WolFoxProStore.m >/dev/null
+          grep -F 'WFNormalizedIdentifierUUIDString' WolFoxProStore.m >/dev/null
+          grep -F 'WF_IDENTIFIER_CHANGED' WolFoxMaster.mm >/dev/null
 
       - name: Build UUID-enabled WolFox
         env:
@@ -60,7 +68,6 @@ jobs:
           test -s WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb
           test -s WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb
           file WolFox.dylib
-          strings WolFox.dylib | grep -F 'activateIdentifierString' >/dev/null || true
           sha256sum WolFox.dylib WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb > SHA256SUMS.txt
 
       - name: Collect artifacts
