@@ -1,0 +1,171 @@
+--- a/WolFoxMaster.mm
++++ b/WolFoxMaster.mm
+@@ -238,6 +238,7 @@
+     // ADDED: تحديث واجهة البلوتوث عند حذف الملف النشط
+     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(btProfileDeactivated) name:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(virtualCameraStateChanged:) name:WFVirtualCameraStateDidChangeNotification object:nil];
++    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(identifierStateChanged:) name:@"WF_IDENTIFIER_CHANGED" object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(contentSizeCategoryChanged:)
+                                                  name:UIContentSizeCategoryDidChangeNotification
+@@ -252,6 +253,7 @@
+     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_ROUTE_STEP_UPDATED" object:nil];
+     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
+     [[NSNotificationCenter defaultCenter] removeObserver:self name:WFVirtualCameraStateDidChangeNotification object:nil];
++    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_IDENTIFIER_CHANGED" object:nil];
+     [[NSNotificationCenter defaultCenter] removeObserver:self name:UIContentSizeCategoryDidChangeNotification object:nil];
+     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_LOCATION_HISTORY_CHANGED" object:nil];
+     [_activeMapSearch cancel];
+@@ -2828,10 +2830,11 @@
+     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"إعادة المعرّف الأصلي؟" message:@"سيتم إيقاف المعرّف المخصص والعودة إلى معرّف الجهاز الأصلي." preferredStyle:UIAlertControllerStyleAlert];
+     [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+     [alert addAction:[UIAlertAction actionWithTitle:@"إعادة الآن" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+-        NSString *orig = [WFLicenseClient deviceIdentifier];
+         UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
+-        tf.text = orig; [[WolFoxProStore shared] deactivateIdentifier]; [self refreshSpoofHeaderStatus];
+-        [self showToast:@"✅ تمت إضافة المعرّف وتفعيله"];
++        tf.text = @"";
++        [[WolFoxProStore shared] deactivateIdentifier];
++        [self refreshSpoofHeaderStatus];
++        [self showToast:@"✅ تم إيقاف المعرّف المخصص والعودة للأصلي"];
+         UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
+         status.text = @"حالة تزييف المعرّفات: متوقف";
+         status.textColor = [WolFoxProTheme textSecondary];
+@@ -2839,6 +2842,23 @@
+     [self presentViewController:alert animated:YES completion:nil];
+ }
+ 
++- (void)identifierStateChanged:(__unused NSNotification *)notification {
++    if (!NSThread.isMainThread) {
++        dispatch_async(dispatch_get_main_queue(), ^{ [self identifierStateChanged:nil]; });
++        return;
++    }
++    UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
++    if (tf) tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: @"";
++    UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
++    BOOL active = [WolFoxProStore shared].validatedActiveIdentifier != nil;
++    if (status) {
++        status.text = active ? @"حالة تزييف المعرّفات: مفعّل" : @"حالة تزييف المعرّفات: متوقف";
++        status.textColor = active ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
++    }
++    [self refreshSpoofHeaderStatus];
++    if (_activePage == 1) [self switchPage:1];
++}
++
+ - (void)setupCameraPage {
+     CGFloat w = _scrollDashboard.bounds.size.width;
+     [self setupVirtualCameraCardAtY:10.0 width:w];
+--- a/WolFoxProStore.m
++++ b/WolFoxProStore.m
+@@ -6,6 +6,17 @@
+ 
+ NSNotificationName const WFSpoofStateDidChangeNotification = @"WFSpoofStateDidChangeNotification";
+ 
++static NSString *WFNormalizedIdentifierUUIDString(NSString *value) {
++    if (![value isKindOfClass:[NSString class]]) return nil;
++    NSString *raw = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
++    if ([raw.lowercaseString hasPrefix:@"urn:uuid:"]) raw = [raw substringFromIndex:9];
++    if ([raw hasPrefix:@"{"] && [raw hasSuffix:@"}"] && raw.length > 2) {
++        raw = [raw substringWithRange:NSMakeRange(1, raw.length - 2)];
++    }
++    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:raw];
++    return uuid.UUIDString;
++}
++
+ @implementation WolFoxProLocation
+ - (id)copyWithZone:(NSZone *)zone {
+     WolFoxProLocation *copy = [[WolFoxProLocation allocWithZone:zone] init];
+@@ -466,23 +477,23 @@
+         if (![rawIdentifier isKindOfClass:[NSDictionary class]]) continue;
+         NSDictionary *d = (NSDictionary *)rawIdentifier;
+         NSString *uuidValue = [d[@"uuid"] isKindOfClass:[NSString class]] ? d[@"uuid"] : nil;
+-        NSUUID *savedUUID = [[NSUUID alloc] initWithUUIDString:uuidValue];
+-        if (!savedUUID || [seenIdentifierUUIDs containsObject:savedUUID.UUIDString]) continue;
++        NSString *normalizedUUID = WFNormalizedIdentifierUUIDString(uuidValue);
++        if (!normalizedUUID || [seenIdentifierUUIDs containsObject:normalizedUUID.lowercaseString]) continue;
+         WolFoxProIdentifier *i = [WolFoxProIdentifier new];
+-        i.uuid = savedUUID.UUIDString;
++        i.uuid = normalizedUUID;
+         NSString *rawName = [d[@"name"] isKindOfClass:[NSString class]] ? d[@"name"] : @"";
+         NSString *trimmedName = [rawName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+         i.name = trimmedName.length ? trimmedName : @"هوية محفوظة";
+         id dateValue = d[@"date"];
+         NSTimeInterval timestamp = [dateValue respondsToSelector:@selector(doubleValue)] ? [dateValue doubleValue] : NSDate.date.timeIntervalSince1970;
+         i.createdAt = [NSDate dateWithTimeIntervalSince1970:timestamp];
+-        [seenIdentifierUUIDs addObject:i.uuid];
++        [seenIdentifierUUIDs addObject:i.uuid.lowercaseString];
+         [_mutableIdentifiers addObject:i];
+         if (_mutableIdentifiers.count >= 50) break;
+     }
+-    NSUUID *activeUUID = [[NSUUID alloc] initWithUUIDString:[u stringForKey:@"WF_PRO_ACTIVE_ID"]];
+-    self.activeIdentifierUUID = activeUUID.UUIDString;
+-    if (activeUUID && ![seenIdentifierUUIDs containsObject:activeUUID.UUIDString]) {
++    NSString *normalizedActiveUUID = WFNormalizedIdentifierUUIDString([u stringForKey:@"WF_PRO_ACTIVE_ID"]);
++    self.activeIdentifierUUID = normalizedActiveUUID;
++    if (normalizedActiveUUID && ![seenIdentifierUUIDs containsObject:normalizedActiveUUID.lowercaseString]) {
+         self.activeIdentifierUUID = nil;
+     }
+     if (!self.activeIdentifierUUID.length) [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
+@@ -578,7 +589,8 @@
+             if (ids.count >= 50) break;
+         }
+         [u setObject:ids forKey:@"WF_PRO_IDS"];
+-        if (self.activeIdentifierUUID) [u setObject:self.activeIdentifierUUID forKey:@"WF_PRO_ACTIVE_ID"];
++        NSString *normalizedActive = WFNormalizedIdentifierUUIDString(self.activeIdentifierUUID);
++        if (normalizedActive) [u setObject:normalizedActive forKey:@"WF_PRO_ACTIVE_ID"];
+         else [u removeObjectForKey:@"WF_PRO_ACTIVE_ID"];
+@@ -616,16 +628,16 @@
+ 
+ - (void)saveIdentifier:(WolFoxProIdentifier *)i {
+     if (!i) return;
+-    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:i.uuid];
+-    if (!uuid) return;
++    NSString *normalizedUUID = WFNormalizedIdentifierUUIDString(i.uuid);
++    if (!normalizedUUID) return;
+     WolFoxProIdentifier *safeIdentifier = [i copy];
+-    safeIdentifier.uuid = uuid.UUIDString;
++    safeIdentifier.uuid = normalizedUUID;
+     NSString *trimmedName = [safeIdentifier.name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+     safeIdentifier.name = trimmedName.length ? trimmedName : @"هوية محفوظة";
+     if (!safeIdentifier.createdAt) safeIdentifier.createdAt = NSDate.date;
+     @synchronized(self) {
+         for (WolFoxProIdentifier *existing in [_mutableIdentifiers copy]) {
+-            if ([existing.uuid isEqualToString:safeIdentifier.uuid]) [_mutableIdentifiers removeObject:existing];
++            if ([existing.uuid caseInsensitiveCompare:safeIdentifier.uuid] == NSOrderedSame) [_mutableIdentifiers removeObject:existing];
+         }
+         [_mutableIdentifiers insertObject:safeIdentifier atIndex:0];
+         while (_mutableIdentifiers.count > 50) [_mutableIdentifiers removeLastObject];
+@@ -634,18 +646,17 @@
+ }
+ 
+ - (NSUUID *)validatedActiveIdentifier {
+-    NSString *value = self.activeIdentifierUUID;
+-    return value.length ? [[NSUUID alloc] initWithUUIDString:value] : nil;
++    NSString *normalized = WFNormalizedIdentifierUUIDString(self.activeIdentifierUUID);
++    return normalized.length ? [[NSUUID alloc] initWithUUIDString:normalized] : nil;
+ }
+ 
+ - (BOOL)activateIdentifierString:(NSString *)value {
+-    NSString *trimmed = [value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+-    NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:trimmed];
+-    if (!uuid) return NO;
+-    self.activeIdentifierUUID = uuid.UUIDString;
++    NSString *normalizedUUID = WFNormalizedIdentifierUUIDString(value);
++    if (!normalizedUUID) return NO;
++    self.activeIdentifierUUID = normalizedUUID;
+     BOOL alreadySaved = NO;
+     for (WolFoxProIdentifier *identifier in _mutableIdentifiers) {
+-        if ([identifier.uuid isEqualToString:self.activeIdentifierUUID]) {
++        if ([identifier.uuid caseInsensitiveCompare:self.activeIdentifierUUID] == NSOrderedSame) {
+             alreadySaved = YES;
+             break;
+         }
+@@ -671,7 +682,7 @@
+ 
+ - (void)deleteIdentifierUUID:(NSString *)uuid {
+     NSUInteger index = [_mutableIdentifiers indexOfObjectPassingTest:^BOOL(WolFoxProIdentifier *i, NSUInteger idx, BOOL *stop) {
+-        if (![i.uuid isEqualToString:uuid]) return NO;
++        if ([i.uuid caseInsensitiveCompare:uuid] != NSOrderedSame) return NO;
+         *stop = YES;
+         return YES;
+     }];
