@@ -1,0 +1,42 @@
+name: Apply Custom Identifier UI
+
+on:
+  push:
+    branches: [wolfox-uuid-input]
+    paths:
+      - 'identifier-fixes/apply_custom_identifier_ui.py'
+      - '.github/workflows/apply-custom-identifier-ui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: wolfox-uuid-input
+          fetch-depth: 0
+
+      - name: Apply identifier UI changes
+        run: |
+          python3 identifier-fixes/apply_custom_identifier_ui.py
+          git diff --check
+          grep -F 'المعرّف المخصص للتطبيق' WolFoxMaster.mm >/dev/null
+          grep -F 'إضافة المعرّف المخصص وتفعيله' WolFoxMaster.mm >/dev/null
+          grep -F 'BOOL confirmedSaved = NO;' WolFoxMaster.mm >/dev/null
+          grep -F 'تم حفظ المعرّف المخصص وتفعيله' WolFoxMaster.mm >/dev/null
+
+      - name: Commit patched source
+        run: |
+          if git diff --quiet -- WolFoxMaster.mm; then
+            echo 'No source changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add WolFoxMaster.mm
+          git commit -m 'Expose and verify custom identifier section'
+          git push origin HEAD:wolfox-uuid-input
