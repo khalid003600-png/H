@@ -79,3 +79,5 @@ void WFLogEvent(NSString *event, NSDictionary<NSString *, id> *fields) {
 
 // التحسينات العربية الإضافية لنسختي فل ولايت. لا تغيّر التصميم الأساسي.
 #import "WolFoxArabicEnhancements.inc"
+// حفظ المفضلة وكود التفعيل بدون فقدان أو طلب إدخال متكرر.
+#import "WFPersistenceFixes.m"
