@@ -45,6 +45,8 @@ jobs:
           grep -F 'WF_PRO_IDS' WolFoxProStore.m >/dev/null
           grep -F 'WF_PRO_ACTIVE_ID' WolFoxProStore.m >/dev/null
           grep -F 'WFNormalizedIdentifierUUIDString' WolFoxProStore.m >/dev/null
+          grep -F 'المعرّف المخصص للتطبيق' WolFoxMaster.mm >/dev/null
+          grep -F 'activeMatchesExpected' WolFoxMaster.mm >/dev/null
 
       - name: Build UUID-enabled WolFox
         env:
