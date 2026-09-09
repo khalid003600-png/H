@@ -18,6 +18,6 @@ reject "$MASTER" 'Fake GPS Wolf' "لا يوجد اسم منتج قديم ظاه�
 check "$ACTIVATION" 'showToolHeightConstraint.constant = 0.0;' "طي أزرار النجاح عند الفشل"
 check "$ACTIVATION" 'exclamationmark.triangle.fill' "أيقونة الفشل واضحة"
 check "$ACTIVATION" 'تعذّر تفعيل الكود' "رسالة الفشل عربية وواضحة"
-check "$CONFIG" 'WF_TWEAK_VERSION @"1.8.6-Full"' "الإصدار الأساسي 1.8.6"
+check "$CONFIG" 'WF_TWEAK_VERSION @"2.0.0-Full"' "الإصدار الأساسي 2.0.0"
 
 echo "✅ اجتاز اتساق واجهة Full/Lite اختبارات الحماية."
