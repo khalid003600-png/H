@@ -420,7 +420,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     NSArray *tabPages = @[@0, @4];
 #else
     NSArray *icons = @[@"location.fill", @"person.text.rectangle.fill", @"antenna.radiowaves.left.and.right", @"camera.fill", @"gearshape.fill"];
-    NSArray *tabLabels = @[@"الموقع GPS", @"معرف الجهاز", @"البلوتوث", @"الكاميرا", @"الإعدادات"];
+    NSArray *tabLabels = @[@"الموقع GPS", @"المعرّف المخصص", @"البلوتوث", @"الكاميرا", @"الإعدادات"];
     NSArray *tabPages = @[@0, @1, @2, @3, @4];
 #endif
     CGFloat tw = w / icons.count;
@@ -2441,13 +2441,19 @@ static BOOL WFMasterProcessIsEligible(void) {
     [_scrollDashboard addSubview:idCard];
     
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, idCard.bounds.size.width, 30)];
-    title.text = @"الهوية الموحدة • IDFA • IDFV • Web"; title.textColor = [WolFoxProTheme textPrimary]; title.textAlignment = NSTextAlignmentCenter; title.font = [WolFoxProTheme fontOfSize:16 weight:UIFontWeightBold];
+    title.text = @"المعرّف المخصص للتطبيق"; title.textColor = [WolFoxProTheme textPrimary]; title.textAlignment = NSTextAlignmentCenter; title.font = [WolFoxProTheme fontOfSize:16 weight:UIFontWeightBold];
     [idCard addSubview:title];
     
     UITextField *tf = [[UITextField alloc] initWithFrame:CGRectMake(15, 60, idCard.bounds.size.width - 30, 50)];
     tf.backgroundColor = [WolFoxProTheme surfaceSecondary]; tf.layer.cornerRadius = 12; tf.textColor = [WolFoxProTheme textPrimary]; tf.textAlignment = NSTextAlignmentCenter;
     tf.layer.borderWidth = 1.0; tf.layer.borderColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.32].CGColor; tf.tintColor = [WolFoxProTheme accent]; tf.delegate = self;
-    tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: [WFLicenseClient deviceIdentifier];
+    tf.placeholder = @"UUID مخصص — XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+    tf.text = [WolFoxProStore shared].activeIdentifierUUID ?: @"";
+    tf.autocapitalizationType = UITextAutocapitalizationTypeAllCharacters;
+    tf.autocorrectionType = UITextAutocorrectionTypeNo;
+    tf.clearButtonMode = UITextFieldViewModeWhileEditing;
+    tf.returnKeyType = UIReturnKeyDone;
+    tf.accessibilityLabel = @"إدخال المعرّف المخصص UUID";
     tf.font = [WolFoxProTheme fontOfSize:11 weight:UIFontWeightBold];
     objc_setAssociatedObject(self, "_id_tf_page", tf, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [idCard addSubview:tf];
@@ -2467,7 +2473,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     layersValue.font = [WolFoxProTheme fontOfSize:11 weight:UIFontWeightBold];
     [layersCard addSubview:layersValue];
 
-    UIButton *sav = [self royalBtnInside:idCard t:@"حفظ وتفعيل" i:@"checkmark" c:[WolFoxProTheme success] y:185];
+    UIButton *sav = [self royalBtnInside:idCard t:@"إضافة المعرّف المخصص وتفعيله" i:@"checkmark" c:[WolFoxProTheme success] y:185];
     [sav addTarget:self action:@selector(saveIDProPage) forControlEvents:UIControlEventTouchUpInside];
     
     UIButton *imp = [self royalBtnInside:idCard t:@"استيراد" i:@"arrow.down" c:[WolFoxProTheme accent] y:250];
@@ -2481,7 +2487,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 
     UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 440, idCard.bounds.size.width - 30, 28)];
     BOOL identifierActive = [WolFoxProStore shared].validatedActiveIdentifier != nil;
-    idStatus.text = identifierActive ? @"حالة تزييف المعرّفات: مفعّل" : @"حالة تزييف المعرّفات: متوقف";
+    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓  %@", [WolFoxProStore shared].activeIdentifierUUID ?: @""] : @"لا يوجد معرّف مخصص مفعّل";
     idStatus.textColor = identifierActive ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
     idStatus.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.10];
     idStatus.layer.cornerRadius = 10; idStatus.clipsToBounds = YES;
@@ -2663,17 +2669,33 @@ static BOOL WFMasterProcessIsEligible(void) {
 
 - (void)saveIDProPage {
     UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
+    WolFoxProStore *store = [WolFoxProStore shared];
     NSString *raw = [tf.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
-    raw = [raw stringByReplacingOccurrencesOfString:@"urn:uuid:" withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, raw.length)];
-    raw = [raw stringByReplacingOccurrencesOfString:@"{" withString:@""];
-    raw = [raw stringByReplacingOccurrencesOfString:@"}" withString:@""];
+    if ([raw.lowercaseString hasPrefix:@"urn:uuid:"]) raw = [raw substringFromIndex:9];
+    if ([raw hasPrefix:@"{"] && [raw hasSuffix:@"}"] && raw.length > 2) {
+        raw = [raw substringWithRange:NSMakeRange(1, raw.length - 2)];
+    }
     NSUUID *normalizedUUID = [[NSUUID alloc] initWithUUIDString:raw];
-    if (normalizedUUID && [[WolFoxProStore shared] activateIdentifierString:normalizedUUID.UUIDString]) {
-        tf.text = [WolFoxProStore shared].activeIdentifierUUID;
+    if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
+        NSString *activeUUID = store.activeIdentifierUUID ?: @"";
+        BOOL confirmedSaved = NO;
+        for (WolFoxProIdentifier *item in store.identifiers) {
+            if ([item.uuid caseInsensitiveCompare:activeUUID] == NSOrderedSame) {
+                confirmedSaved = YES;
+                break;
+            }
+        }
+        if (!confirmedSaved || ![store validatedActiveIdentifier]) {
+            [self showToast:@"تعذر تأكيد حفظ المعرّف المخصص ❌"];
+            return;
+        }
+        tf.text = activeUUID;
         [self refreshSpoofHeaderStatus];
         UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
-        status.text = @"حالة تزييف المعرّفات: مفعّل";
+        status.text = [NSString stringWithFormat:@"تمت الإضافة والتفعيل ✓  %@", activeUUID];
         status.textColor = [WolFoxProTheme success];
+        [self showToast:@"✅ تم حفظ المعرّف المخصص وتفعيله"];
+        [self switchPage:1];
     } else {
         [self showToast:@"صيغة UUID غير صحيحة ❌"];
     }
@@ -2697,12 +2719,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"إعادة المعرّف الأصلي؟" message:@"سيتم إيقاف المعرّف المخصص والعودة إلى معرّف الجهاز الأصلي." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"إعادة الآن" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
-        NSString *orig = [WFLicenseClient deviceIdentifier];
         UITextField *tf = objc_getAssociatedObject(self, "_id_tf_page");
-        tf.text = orig; [[WolFoxProStore shared] deactivateIdentifier]; [self refreshSpoofHeaderStatus];
+        tf.text = @"";
+        [[WolFoxProStore shared] deactivateIdentifier];
+        [self refreshSpoofHeaderStatus];
         UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
-        status.text = @"حالة تزييف المعرّفات: متوقف";
+        status.text = @"لا يوجد معرّف مخصص مفعّل";
         status.textColor = [WolFoxProTheme textSecondary];
+        [self showToast:@"✅ تم إيقاف المعرّف المخصص والعودة للأصلي"];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
