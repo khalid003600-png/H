@@ -37,11 +37,11 @@ jobs:
           curl --fail --location --retry 3 --retry-delay 2 --output "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" "$SDK_BASE/iPhoneOS16.5.sdk.tar.xz"
           tar -xJf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
 
-      - name: Validate UUID input source
+      - name: Validate identifier source
         run: |
-          grep -F 'أدخل UUID هنا' WolFoxMaster.mm >/dev/null
-          grep -F 'إضافة المعرف وتفعيله' WolFoxMaster.mm >/dev/null
           grep -F 'activateIdentifierString' WolFoxMaster.mm >/dev/null
+          grep -F '_id_tf_page' WolFoxMaster.mm >/dev/null
+          grep -F 'NSUUID' WolFoxMaster.mm >/dev/null
 
       - name: Build UUID-enabled WolFox
         env:
@@ -65,5 +65,3 @@ jobs:
           name: WolFox-UUID-Build
           path: artifacts/
           if-no-files-found: warn
-
-# trigger: rebuild uuid dylib
