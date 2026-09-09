@@ -42,6 +42,6 @@ jobs:
           sha256sum artifacts/* > artifacts/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WolFox-${{ github.ref_name }}-${{ github.run_number }}
+          name: WolFox-Branch-${{ github.run_id }}
           path: artifacts/
           if-no-files-found: error
