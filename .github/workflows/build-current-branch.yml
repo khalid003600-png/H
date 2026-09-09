@@ -1,0 +1,47 @@
+name: Build Current Branch
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, clean-runner-match, codex/location-history, codex/preserve-license-codes, feature/jailbreak-edition, feature/lite-unified-search, feature/lspoof-fake-gps-wolf, feature/unified-gps-search, feature/whatsapp-location-ui, wolfox-uuid-input]
+    paths: ['WolFoxMaster.mm','WolFoxProStore.m','WolFoxIntegrated.mm','WFLicenseClient.m','WFActivationViewController.m','build_v1_deb.sh','.github/workflows/build-current-branch.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+      SDK_RELEASE_TAG: master-146e41f
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential ca-certificates clang curl dpkg-dev fakeroot file git libplist-dev libssl-dev libxml2-dev lld llvm make patch perl pkg-config python3 ripgrep xz-utils zlib1g-dev
+      - name: Install Theos and iOS SDK
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          curl --fail --location --retry 3 --retry-delay 2 --output "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" "https://github.com/theos/sdks/releases/download/${SDK_RELEASE_TAG}/iPhoneOS16.5.sdk.tar.xz"
+          tar -xJf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
+      - name: Validate branch sources
+        run: test -s build_v1_deb.sh && test -s WolFoxMaster.mm && test -s WolFoxProStore.m && test -s WolFoxIntegrated.mm
+      - name: Build branch
+        env:
+          WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
+          WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+        run: |
+          test -n "$WOLFOX_PROJECT_KEY" || { echo "::error::Missing WOLFOX_PROJECT_KEY repository secret"; exit 1; }
+          chmod +x build_v1_deb.sh
+          THEOS="$THEOS" SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" MIN_IOS=15.0 REQUIRED_SDK_VERSION=16.5 WOLFOX_ARCHS=arm64 WOLFOX_TARGET_BUNDLE_IDS='sa.gov.moia.mosques2,sa.gov.moia.mosques-2' WOLFOX_PANEL_BASE_URL="$WOLFOX_PANEL_BASE_URL" WOLFOX_PROJECT_KEY="$WOLFOX_PROJECT_KEY" WOLFOX_VERSION=2.0.0 WOLFOX_REQUIRE_SIGNING=0 WOLFOX_HARDENING=1 ./build_v1_deb.sh
+      - name: Collect outputs
+        run: |
+          mkdir -p artifacts
+          find . -maxdepth 1 -type f \( -name '*.dylib' -o -name '*.deb' \) -exec cp {} artifacts/ \;
+          test -n "$(find artifacts -type f -print -quit)"
+          sha256sum artifacts/* > artifacts/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WolFox-${{ github.ref_name }}-${{ github.run_number }}
+          path: artifacts/
+          if-no-files-found: error
