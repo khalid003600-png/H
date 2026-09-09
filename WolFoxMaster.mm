@@ -2485,13 +2485,17 @@ static BOOL WFMasterProcessIsEligible(void) {
     UIButton *res = [self royalBtnInside:idCard t:@"إعادة تعيين للأصلي" i:@"arrow.clockwise" c:[WolFoxProTheme danger] y:380];
     [res addTarget:self action:@selector(resetIDProPage) forControlEvents:UIControlEventTouchUpInside];
 
-    UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 440, idCard.bounds.size.width - 30, 28)];
+    UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 436, idCard.bounds.size.width - 30, 44)];
     BOOL identifierActive = [WolFoxProStore shared].validatedActiveIdentifier != nil;
-    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓  %@", [WolFoxProStore shared].activeIdentifierUUID ?: @""] : @"لا يوجد معرّف مخصص مفعّل";
+    NSString *activeIdentifierText = [WolFoxProStore shared].activeIdentifierUUID ?: @"";
+    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓\n%@", activeIdentifierText] : @"لا يوجد معرّف مخصص مفعّل";
     idStatus.textColor = identifierActive ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
     idStatus.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.10];
     idStatus.layer.cornerRadius = 10; idStatus.clipsToBounds = YES;
-    idStatus.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightBold];
+    idStatus.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightBold];
+    idStatus.numberOfLines = 2;
+    idStatus.adjustsFontSizeToFitWidth = YES;
+    idStatus.minimumScaleFactor = 0.75;
     idStatus.textAlignment = NSTextAlignmentCenter;
     [idCard addSubview:idStatus];
     objc_setAssociatedObject(self, "_id_status_label", idStatus, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -2677,24 +2681,27 @@ static BOOL WFMasterProcessIsEligible(void) {
     }
     NSUUID *normalizedUUID = [[NSUUID alloc] initWithUUIDString:raw];
     if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
+        NSString *expectedUUID = normalizedUUID.UUIDString;
         NSString *activeUUID = store.activeIdentifierUUID ?: @"";
+        BOOL activeMatchesExpected = [activeUUID caseInsensitiveCompare:expectedUUID] == NSOrderedSame;
         BOOL confirmedSaved = NO;
         for (WolFoxProIdentifier *item in store.identifiers) {
-            if ([item.uuid caseInsensitiveCompare:activeUUID] == NSOrderedSame) {
+            if ([item.uuid caseInsensitiveCompare:expectedUUID] == NSOrderedSame) {
                 confirmedSaved = YES;
                 break;
             }
         }
-        if (!confirmedSaved || ![store validatedActiveIdentifier]) {
-            [self showToast:@"تعذر تأكيد حفظ المعرّف المخصص ❌"];
+        if (!activeMatchesExpected || !confirmedSaved || ![store validatedActiveIdentifier]) {
+            [self showToast:@"تعذر تأكيد حفظ وتفعيل المعرّف المخصص ❌"];
             return;
         }
         tf.text = activeUUID;
         [self refreshSpoofHeaderStatus];
         UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
-        status.text = [NSString stringWithFormat:@"تمت الإضافة والتفعيل ✓  %@", activeUUID];
+        status.text = [NSString stringWithFormat:@"تمت الإضافة والتفعيل ✓\n%@", activeUUID];
+        status.numberOfLines = 2;
         status.textColor = [WolFoxProTheme success];
-        [self showToast:@"✅ تم حفظ المعرّف المخصص وتفعيله"];
+        [self showToast:@"✅ تم التحقق: المعرّف محفوظ ومفعّل"];
         [self switchPage:1];
     } else {
         [self showToast:@"صيغة UUID غير صحيحة ❌"];
