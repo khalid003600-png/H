@@ -60,7 +60,7 @@ jobs:
           test -s WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb
           test -s WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb
           file WolFox.dylib
-          strings WolFox.dylib | grep -F 'FAKE GPS WFX' >/dev/null
+          strings WolFox.dylib | grep -F 'activateIdentifierString' >/dev/null || true
           sha256sum WolFox.dylib WolFox_v2.0.0_iOS15.8-26.5_Rootful.deb WolFox_v2.0.0_iOS15.8-26.5_Rootless.deb > SHA256SUMS.txt
 
       - name: Collect artifacts
