@@ -1,0 +1,120 @@
+name: Apply Identifier UI Confirmation
+
+on:
+  push:
+    branches: [wolfox-uuid-input]
+    paths:
+      - '.github/workflows/apply-identifier-ui-confirm.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: wolfox-uuid-input
+
+      - name: Harden custom identifier section and confirmation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('WolFoxMaster.mm')
+          s = p.read_text()
+
+          old_status = '''    UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 440, idCard.bounds.size.width - 30, 28)];
+    BOOL identifierActive = [WolFoxProStore shared].validatedActiveIdentifier != nil;
+    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓  %@", [WolFoxProStore shared].activeIdentifierUUID ?: @""] : @"لا يوجد معرّف مخصص مفعّل";
+    idStatus.textColor = identifierActive ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
+    idStatus.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.10];
+    idStatus.layer.cornerRadius = 10; idStatus.clipsToBounds = YES;
+    idStatus.font = [WolFoxProTheme fontOfSize:12 weight:UIFontWeightBold];
+    idStatus.textAlignment = NSTextAlignmentCenter;
+'''
+          new_status = '''    UILabel *idStatus = [[UILabel alloc] initWithFrame:CGRectMake(15, 436, idCard.bounds.size.width - 30, 44)];
+    BOOL identifierActive = [WolFoxProStore shared].validatedActiveIdentifier != nil;
+    NSString *activeIdentifierText = [WolFoxProStore shared].activeIdentifierUUID ?: @"";
+    idStatus.text = identifierActive ? [NSString stringWithFormat:@"المعرّف المخصص مفعّل ✓\\n%@", activeIdentifierText] : @"لا يوجد معرّف مخصص مفعّل";
+    idStatus.textColor = identifierActive ? [WolFoxProTheme success] : [WolFoxProTheme textSecondary];
+    idStatus.backgroundColor = [[WolFoxProTheme accent] colorWithAlphaComponent:0.10];
+    idStatus.layer.cornerRadius = 10; idStatus.clipsToBounds = YES;
+    idStatus.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightBold];
+    idStatus.numberOfLines = 2;
+    idStatus.adjustsFontSizeToFitWidth = YES;
+    idStatus.minimumScaleFactor = 0.75;
+    idStatus.textAlignment = NSTextAlignmentCenter;
+'''
+
+          old_save = '''    if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
+        NSString *activeUUID = store.activeIdentifierUUID ?: @"";
+        BOOL confirmedSaved = NO;
+        for (WolFoxProIdentifier *item in store.identifiers) {
+            if ([item.uuid caseInsensitiveCompare:activeUUID] == NSOrderedSame) {
+                confirmedSaved = YES;
+                break;
+            }
+        }
+        if (!confirmedSaved || ![store validatedActiveIdentifier]) {
+            [self showToast:@"تعذر تأكيد حفظ المعرّف المخصص ❌"];
+            return;
+        }
+        tf.text = activeUUID;
+        [self refreshSpoofHeaderStatus];
+        UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
+        status.text = [NSString stringWithFormat:@"تمت الإضافة والتفعيل ✓  %@", activeUUID];
+        status.textColor = [WolFoxProTheme success];
+        [self showToast:@"✅ تم حفظ المعرّف المخصص وتفعيله"];
+        [self switchPage:1];
+'''
+          new_save = '''    if (normalizedUUID && [store activateIdentifierString:normalizedUUID.UUIDString]) {
+        NSString *expectedUUID = normalizedUUID.UUIDString;
+        NSString *activeUUID = store.activeIdentifierUUID ?: @"";
+        BOOL activeMatchesExpected = [activeUUID caseInsensitiveCompare:expectedUUID] == NSOrderedSame;
+        BOOL confirmedSaved = NO;
+        for (WolFoxProIdentifier *item in store.identifiers) {
+            if ([item.uuid caseInsensitiveCompare:expectedUUID] == NSOrderedSame) {
+                confirmedSaved = YES;
+                break;
+            }
+        }
+        if (!activeMatchesExpected || !confirmedSaved || ![store validatedActiveIdentifier]) {
+            [self showToast:@"تعذر تأكيد حفظ وتفعيل المعرّف المخصص ❌"];
+            return;
+        }
+        tf.text = activeUUID;
+        [self refreshSpoofHeaderStatus];
+        UILabel *status = objc_getAssociatedObject(self, "_id_status_label");
+        status.text = [NSString stringWithFormat:@"تمت الإضافة والتفعيل ✓\\n%@", activeUUID];
+        status.numberOfLines = 2;
+        status.textColor = [WolFoxProTheme success];
+        [self showToast:@"✅ تم التحقق: المعرّف محفوظ ومفعّل"];
+        [self switchPage:1];
+'''
+
+          if s.count(old_status) != 1:
+              raise SystemExit(f'Expected one status block, found {s.count(old_status)}')
+          if s.count(old_save) != 1:
+              raise SystemExit(f'Expected one save block, found {s.count(old_save)}')
+
+          s = s.replace(old_status, new_status, 1)
+          s = s.replace(old_save, new_save, 1)
+          p.write_text(s)
+          PY
+
+      - name: Verify source change
+        run: |
+          grep -F 'المعرّف المخصص للتطبيق' WolFoxMaster.mm >/dev/null
+          grep -F 'activeMatchesExpected' WolFoxMaster.mm >/dev/null
+          grep -F 'تم التحقق: المعرّف محفوظ ومفعّل' WolFoxMaster.mm >/dev/null
+          grep -F 'numberOfLines = 2' WolFoxMaster.mm >/dev/null
+
+      - name: Commit source change
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add WolFoxMaster.mm
+          git diff --cached --quiet && exit 0
+          git commit -m 'Confirm custom identifier save and activation in UI'
+          git push origin HEAD:wolfox-uuid-input
