@@ -1,0 +1,136 @@
+name: Build DEB and DYLIB for All Branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version
+        required: false
+        default: "2.0.0"
+      bundle_ids:
+        description: Comma-separated target bundle identifiers
+        required: false
+        default: "sa.gov.moia.mosques2,sa.gov.moia.mosques-2"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-all-branches.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wolfox-all-branches
+  cancel-in-progress: true
+
+jobs:
+  branches:
+    name: Discover repository branches
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        name: Create safe branch matrix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          branches="$(gh api --paginate "repos/$GH_REPOSITORY/branches?per_page=100" --jq '.[].name')"
+          test -n "$branches"
+          matrix="$(printf '%s\n' "$branches" | python3 -c 'import json,re,sys; print(json.dumps({"include":[{"ref":b,"safe":re.sub(r"[^A-Za-z0-9._-]+","-",b).strip("-") or "branch"} for b in map(str.strip,sys.stdin) if b]},separators=(",",":")))'"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$matrix"
+
+  build:
+    name: Build ${{ matrix.ref }}
+    needs: branches
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.branches.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+      SDK_RELEASE_TAG: master-146e41f
+      WOLFOX_VERSION: ${{ inputs.version || '2.0.0' }}
+      WOLFOX_TARGET_BUNDLE_IDS: ${{ inputs.bundle_ids || 'sa.gov.moia.mosques2,sa.gov.moia.mosques-2' }}
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential ca-certificates clang curl dpkg-dev fakeroot file git libplist-dev libssl-dev libxml2-dev lld llvm make patch perl pkg-config python3 ripgrep xz-utils zlib1g-dev
+
+      - name: Install Theos and iOS SDK
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          sdk_archive="$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz"
+          curl --fail --location --retry 3 --retry-delay 2 --output "$sdk_archive" "https://github.com/theos/sdks/releases/download/$SDK_RELEASE_TAG/iPhoneOS16.5.sdk.tar.xz"
+          tar -xJf "$sdk_archive" -C "$THEOS/sdks"
+          test -d "$THEOS/sdks/iPhoneOS16.5.sdk"
+
+      - name: Validate branch build inputs
+        run: |
+          test -s build_v1_deb.sh
+          test -s WolFoxMaster.mm
+          test -s WolFoxProStore.m
+          test -s WolFoxIntegrated.mm
+
+      - name: Build DEB and DYLIB without repository secrets
+        run: |
+          chmod +x build_v1_deb.sh
+          THEOS="$THEOS" \
+          SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" \
+          MIN_IOS=15.0 \
+          REQUIRED_SDK_VERSION=16.5 \
+          WOLFOX_ARCHS=arm64 \
+          WOLFOX_TARGET_BUNDLE_IDS="$WOLFOX_TARGET_BUNDLE_IDS" \
+          WOLFOX_PANEL_BASE_URL="https://invalid.example/api/v1" \
+          WOLFOX_PROJECT_KEY="CI-UNCONFIGURED" \
+          WOLFOX_VERSION="$WOLFOX_VERSION" \
+          WOLFOX_REQUIRE_SIGNING=0 \
+          WOLFOX_HARDENING=1 \
+          ./build_v1_deb.sh
+
+      - name: Prepare deploy files
+        env:
+          BRANCH_REF: ${{ matrix.ref }}
+          BRANCH_SAFE: ${{ matrix.safe }}
+        run: |
+          deploy_dir="deploy/$BRANCH_SAFE"
+          mkdir -p "$deploy_dir"
+          find . -maxdepth 2 -type f \( -name '*.deb' -o -name '*.dylib' \) -not -path './deploy/*' -exec cp -v {} "$deploy_dir/" \;
+          test -n "$(find "$deploy_dir" -type f -name '*.deb' -print -quit)"
+          test -n "$(find "$deploy_dir" -type f -name '*.dylib' -print -quit)"
+          (
+            cd "$deploy_dir"
+            sha256sum ./*.deb ./*.dylib > SHA256SUMS.txt
+            {
+              echo "branch=$BRANCH_REF"
+              echo "commit=${GITHUB_SHA}"
+              echo "version=$WOLFOX_VERSION"
+              echo "build=${GITHUB_RUN_NUMBER}"
+              echo "panel_credentials=not_embedded"
+            } > BUILD_INFO.txt
+            for package in ./*.deb; do dpkg-deb --info "$package" >/dev/null; done
+            for library in ./*.dylib; do file "$library" | tee -a FILE_INFO.txt; done
+          )
+          tar -C deploy -czf "WolFox-${BRANCH_SAFE}-${WOLFOX_VERSION}-deploy.tar.gz" "$BRANCH_SAFE"
+
+      - name: Upload branch DEB and DYLIB
+        uses: actions/upload-artifact@v4
+        with:
+          name: WolFox-${{ matrix.safe }}-${{ env.WOLFOX_VERSION }}-${{ github.run_number }}
+          path: |
+            deploy/${{ matrix.safe }}/
+            WolFox-${{ matrix.safe }}-${{ env.WOLFOX_VERSION }}-deploy.tar.gz
+          if-no-files-found: error
+          retention-days: 30
