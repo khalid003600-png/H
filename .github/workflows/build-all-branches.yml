@@ -38,7 +38,7 @@ jobs:
         run: |
           branches="$(gh api --paginate "repos/$GH_REPOSITORY/branches?per_page=100" --jq '.[].name')"
           test -n "$branches"
-          matrix="$(printf '%s\n' "$branches" | python3 -c 'import json,re,sys; print(json.dumps({"include":[{"ref":b,"safe":re.sub(r"[^A-Za-z0-9._-]+","-",b).strip("-") or "branch"} for b in map(str.strip,sys.stdin) if b]},separators=(",",":")))'"
+          matrix="$(printf '%s\n' "$branches" | python3 -c 'import json,re,sys; print(json.dumps({"include":[{"ref":b,"safe":re.sub(r"[^A-Za-z0-9._-]+","-",b).strip("-") or "branch"} for b in map(str.strip,sys.stdin) if b]},separators=(",",":")))')"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "$matrix"
 
