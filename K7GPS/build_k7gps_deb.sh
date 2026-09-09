@@ -18,7 +18,7 @@ for f in "${FILES[@]}"; do test -s "$SRC_DIR/$f" || { echo "Missing $f"; exit 1;
 test -d "$SDKROOT" || { echo "Missing SDK: $SDKROOT"; exit 1; }
 rm -rf "$BUILD" && mkdir -p "$BUILD/obj"
 FLAGS=(-target arm64-apple-ios${MIN_IOS} -isysroot "$SDKROOT" -I"$SRC_DIR" -fobjc-arc -fblocks -O2 -Wall -Wextra -Wno-deprecated-declarations -Wno-unused-parameter)
-FRAMEWORKS=(-framework UIKit -framework Foundation -framework MapKit -framework CoreLocation -framework Photos -framework PhotosUI -framework QuartzCore)
+FRAMEWORKS=(-framework UIKit -framework Foundation -framework CoreGraphics -framework MapKit -framework CoreLocation -framework Photos -framework PhotosUI -framework QuartzCore)
 OBJS=()
 for f in "${FILES[@]}"; do o="$BUILD/obj/${f%.*}.o"; "$CC" "${FLAGS[@]}" -c "$SRC_DIR/$f" -o "$o"; OBJS+=("$o"); done
 "$CC" -target arm64-apple-ios${MIN_IOS} -isysroot "$SDKROOT" -dynamiclib -fuse-ld=lld -install_name "@rpath/K7GPS.dylib" "${OBJS[@]}" "${FRAMEWORKS[@]}" -o "$PROJECT_DIR/K7GPS.dylib"
