@@ -1,4 +1,5 @@
 #import "K7GPSEngine.h"
+#import <MapKit/MapKit.h>
 #import <math.h>
 
 NSString * const K7GPSEngineLocationDidChangeNotification = @"K7GPSEngineLocationDidChangeNotification";
