@@ -1,0 +1,67 @@
+name: Build WolFox UUID
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [wolfox-uuid-input]
+    paths:
+      - 'WolFoxMaster.mm'
+      - 'WolFoxProStore.m'
+      - 'WolFoxIntegrated.mm'
+      - 'build_v1_deb.sh'
+      - '.github/workflows/build-wolfox-uuid.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+      SDK_RELEASE_TAG: "master-146e41f"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential ca-certificates clang curl dpkg-dev fakeroot file git libplist-dev libssl-dev libxml2-dev lld llvm make patch perl pkg-config python3 ripgrep xz-utils zlib1g-dev
+
+      - name: Install Theos and iOS SDK
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          SDK_BASE="https://github.com/theos/sdks/releases/download/${SDK_RELEASE_TAG}"
+          curl --fail --location --retry 3 --retry-delay 2 --output "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" "$SDK_BASE/iPhoneOS16.5.sdk.tar.xz"
+          tar -xJf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
+
+      - name: Validate UUID input source
+        run: |
+          grep -F 'أدخل UUID هنا' WolFoxMaster.mm >/dev/null
+          grep -F 'إضافة المعرف وتفعيله' WolFoxMaster.mm >/dev/null
+          grep -F 'activateIdentifierString' WolFoxMaster.mm >/dev/null
+
+      - name: Build UUID-enabled WolFox
+        env:
+          WOLFOX_PANEL_BASE_URL: https://gps.p3nd.fun/api/v1
+          WOLFOX_PROJECT_KEY: ${{ secrets.WOLFOX_PROJECT_KEY }}
+        run: |
+          test -n "$WOLFOX_PROJECT_KEY" || { echo "::error::Missing WOLFOX_PROJECT_KEY repository secret"; exit 1; }
+          chmod +x build_v1_deb.sh
+          THEOS="$THEOS" SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" MIN_IOS=15.0 REQUIRED_SDK_VERSION=16.5 WOLFOX_ARCHS=arm64 WOLFOX_TARGET_BUNDLE_IDS='sa.gov.moia.mosques2 sa.gov.moia.mosques-2' WOLFOX_PANEL_BASE_URL="$WOLFOX_PANEL_BASE_URL" WOLFOX_PROJECT_KEY="$WOLFOX_PROJECT_KEY" WOLFOX_VERSION=2.0.0 WOLFOX_REQUIRE_SIGNING=0 WOLFOX_HARDENING=1 ./build_v1_deb.sh
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          mkdir -p artifacts
+          find . -maxdepth 4 -type f \( -name 'WolFox*.dylib' -o -name '*.deb' -o -name 'SHA256SUMS*' \) -exec cp -f {} artifacts/ \; || true
+          if [ -f artifacts/WolFox.dylib ]; then sha256sum artifacts/WolFox.dylib > artifacts/WolFox.dylib.sha256; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WolFox-UUID-Build
+          path: artifacts/
+          if-no-files-found: warn
