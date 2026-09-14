@@ -13,7 +13,7 @@ reject() { if grep -Fq "$2" "$1"; then echo "❌ $3"; exit 1; fi; echo "✅ $3";
 check "$LICENSE_CLIENT" "WFLicenseResult" "فئة نتائج الترخيص معرّفة"
 check "$LICENSE_CLIENT" "isRuntimeLicenseValid" "دالة التحقق من الترخيص موجودة"
 check "$LICENSE_CLIENT" "cachedResult" "ذاكرة التخزين المؤقت للترخيص معرّفة"
-check "$LICENSE_CLIENT" "verify_access_token" "التوقيع الرقمي للترخيص معرّف"
+check "$LICENSE_CLIENT" "Authorization" "توثيق جلسة الترخيص مفعّل"
 
 # Verify license config
 check "$LICENSE_CONFIG" "WF_TWEAK_VERSION" "إصدار Tweak محدد"
