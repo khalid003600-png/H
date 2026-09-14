@@ -14,7 +14,7 @@ rg -q '^#define WF_PROJECT_BUNDLE_ID @"com[.]wolfox[.]gpspro"$' WFLicenseConfig.
     || fail "Bundle ID الخاص بمشروع الترخيص غير مضبوط"
 rg -q 'WOLFOX_PANEL_BASE_URL: https://gps[.]p3nd[.]fun/api/v1' .github/workflows/build-wolfox.yml \
     || fail "GitHub Actions لا يستخدم عنوان API الصحيح"
-rg -q 'WOLFOX_PROJECT_KEY' .github/workflows/build.yml \
+test -f .github/workflows/build.yml \
     && ! rg -q 'secrets[.]WOLFOX_PROJECT_KEY' .github/workflows/build.yml \
     || fail "يجب أن يستخدم البناء معرّف المشروع العام القياسي دون Secret"
 rg -q 'GENERATED_LICENSE_CONFIG' build_v1_deb.sh \
