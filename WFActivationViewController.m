@@ -80,11 +80,7 @@
 
     UILabel *titleLabel = [UILabel new];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-#if WOLFOX_LITE
-    titleLabel.text = @"WolFox Lite";
-#else
-    titleLabel.text = @"WolFox Full";
-#endif
+    titleLabel.text = @"WolFox";
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.font = [UIFont systemFontOfSize:19 weight:UIFontWeightBold];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -94,6 +90,8 @@
     crownIcon.translatesAutoresizingMaskIntoConstraints = NO;
     crownIcon.tintColor = [WolFoxProTheme royalBlue];
     crownIcon.contentMode = UIViewContentModeScaleAspectFit;
+    crownIcon.userInteractionEnabled = YES;
+    [crownIcon addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(copyActivationCode)]];
     [self.headerView addSubview:crownIcon];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -115,11 +113,7 @@
 
     UILabel *subtitle = [UILabel new];
     subtitle.translatesAutoresizingMaskIntoConstraints = NO;
-#if WOLFOX_LITE
-    subtitle.text = @"WolFox Lite";
-#else
-    subtitle.text = @"WolFox Full";
-#endif
+    subtitle.text = @"WolFox";
     subtitle.textColor = [WolFoxProTheme textPrimary];
     subtitle.font = [UIFont systemFontOfSize:23 weight:UIFontWeightBlack];
     subtitle.textAlignment = NSTextAlignmentCenter;
@@ -128,6 +122,7 @@
     UILabel *desc = [UILabel new];
     desc.translatesAutoresizingMaskIntoConstraints = NO;
     desc.text = @"";
+    desc.hidden = YES;
     desc.textColor = [UIColor colorWithWhite:0.73 alpha:1.0];
     desc.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     desc.textAlignment = NSTextAlignmentCenter;
@@ -319,8 +314,16 @@
         [desc.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
 
         [self.codeField.topAnchor constraintEqualToAnchor:desc.bottomAnchor constant:22],
-        [self.codeField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
-        [self.codeField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
+        [self.codeField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:82],
+        [self.codeField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-82],
+        [externalCopyButton.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
+        [externalCopyButton.centerYAnchor constraintEqualToAnchor:self.codeField.centerYAnchor],
+        [externalCopyButton.widthAnchor constraintEqualToConstant:48],
+        [externalCopyButton.heightAnchor constraintEqualToConstant:56],
+        [externalPasteButton.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
+        [externalPasteButton.centerYAnchor constraintEqualToAnchor:self.codeField.centerYAnchor],
+        [externalPasteButton.widthAnchor constraintEqualToConstant:48],
+        [externalPasteButton.heightAnchor constraintEqualToConstant:56],
         [self.codeField.heightAnchor constraintEqualToConstant:56],
 
         [self.activateButton.topAnchor constraintEqualToAnchor:self.codeField.bottomAnchor constant:18],
@@ -607,25 +610,13 @@
 }
 
 - (void)showActivationError:(NSString *)message {
-    self.statusLabel.textColor = [UIColor colorWithRed:1.0 green:0.50 blue:0.50 alpha:1.0];
-    self.statusLabel.backgroundColor = [UIColor colorWithRed:0.35 green:0.08 blue:0.10 alpha:0.78];
-    self.statusLabel.layer.borderColor = [[WolFoxProTheme danger] colorWithAlphaComponent:0.80].CGColor;
-    self.showToolHeightConstraint.constant = 0.0;
-    self.skipHeightConstraint.constant = 0.0;
+    // لا تعرض الشاشة نص فشل دائم؛ النتيجة تظهر في إشعار مستقل فقط.
+    self.statusLabel.hidden = YES;
+    self.statusLabel.text = @"";
     self.showToolButton.hidden = YES;
     self.skipButton.hidden = YES;
-    self.lockIcon.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
-    self.lockIcon.tintColor = [WolFoxProTheme danger];
-    self.statusLabel.text = [NSString stringWithFormat:@"❌ تعذّر تفعيل الكود\n%@\nتحقق من الكود ثم حاول مرة أخرى.", message ?: @"تعذر إكمال التفعيل"];
-    self.statusLabel.hidden = NO;
-    self.statusLabel.alpha = 0;
-    // FIX: show exit button so user can dismiss after a failed attempt
-    self.exitButton.hidden = NO;
-    [UIView animateWithDuration:[WolFoxProTheme transitionDuration] animations:^{
-        self.statusLabel.alpha = 1.0;
-        self.exitButton.alpha = 1.0;
-        [self.view layoutIfNeeded];
-    }];
+    self.showToolHeightConstraint.constant = 0.0;
+    self.skipHeightConstraint.constant = 0.0;
 }
 
 - (void)showToolPressed {
