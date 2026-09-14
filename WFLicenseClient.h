@@ -28,6 +28,7 @@ typedef NS_ENUM(NSInteger, WFLicenseStatus) {
 @property (nonatomic, copy, nullable) NSString *updateURL;
 @property (nonatomic, copy, nullable) NSString *minimumVersion;
 @property (nonatomic, assign) BOOL forceUpdate;
+@property (nonatomic, assign) BOOL adminEnabled;
 @end
 
 @interface WFLicenseClient : NSObject
