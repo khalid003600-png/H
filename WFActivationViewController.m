@@ -162,25 +162,27 @@
     copyCodeButton.tintColor = UIColor.whiteColor;
     copyCodeButton.accessibilityLabel = @"نسخ كود التفعيل";
     [copyCodeButton addTarget:self action:@selector(copyActivationCode) forControlEvents:UIControlEventTouchUpInside];
-    self.codeField.leftView = copyCodeButton;
-    self.codeField.leftViewMode = UITextFieldViewModeAlways;
-
-    UIButton *pasteCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    pasteCodeButton.frame = CGRectMake(0, 0, 48, 56);
-    if (@available(iOS 13.0, *)) {
-        [pasteCodeButton setImage:[UIImage systemImageNamed:@"doc.on.clipboard.fill"] forState:UIControlStateNormal];
-    }
-    pasteCodeButton.backgroundColor = [WolFoxProTheme accent];
-    pasteCodeButton.layer.cornerRadius = 12.0;
-    pasteCodeButton.layer.borderWidth = 1.0;
-    pasteCodeButton.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.35].CGColor;
-    pasteCodeButton.tintColor = [UIColor whiteColor];
-    pasteCodeButton.adjustsImageWhenHighlighted = YES;
-    pasteCodeButton.accessibilityLabel = @"لصق كود التفعيل من الحافظة";
-    [pasteCodeButton addTarget:self action:@selector(pasteActivationCode) forControlEvents:UIControlEventTouchUpInside];
-    self.codeField.rightView = pasteCodeButton;
-    self.codeField.rightViewMode = UITextFieldViewModeAlways;
+    self.codeField.leftView = nil;
+    self.codeField.rightView = nil;
     [card addSubview:self.codeField];
+
+    UIButton *externalCopyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    externalCopyButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [externalCopyButton setTitle:@"نسخ" forState:UIControlStateNormal];
+    [externalCopyButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    externalCopyButton.backgroundColor = [WolFoxProTheme accent];
+    externalCopyButton.layer.cornerRadius = 12.0;
+    [externalCopyButton addTarget:self action:@selector(copyActivationCode) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:externalCopyButton];
+
+    UIButton *externalPasteButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    externalPasteButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [externalPasteButton setTitle:@"لصق" forState:UIControlStateNormal];
+    [externalPasteButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    externalPasteButton.backgroundColor = [WolFoxProTheme royalBlue];
+    externalPasteButton.layer.cornerRadius = 12.0;
+    [externalPasteButton addTarget:self action:@selector(pasteActivationCode) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:externalPasteButton];
 
     self.activateButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.activateButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -189,7 +191,7 @@
     self.activateButton.layer.borderWidth = 1.0;
     self.activateButton.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.38].CGColor;
     self.activateButton.adjustsImageWhenHighlighted = YES;
-    [self.activateButton setTitle:@"تحقق من الكود وتفعيل الأداة" forState:UIControlStateNormal];
+    [self.activateButton setTitle:@"تفعيل الاشتراك" forState:UIControlStateNormal];
     [self.activateButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.activateButton.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBlack];
     
