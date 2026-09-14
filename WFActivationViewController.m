@@ -1,3 +1,4 @@
+#import <math.h>
 // WFActivationViewController.m - WolFox v.1.0.0 "Royal Final"
 #import "WFActivationViewController.h"
 
