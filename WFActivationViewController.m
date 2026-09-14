@@ -154,14 +154,6 @@
     self.codeField.accessibilityHint = @"اكتب الكود أو استخدم زر اللصق ثم اضغط تحقق وتفعيل";
     [self.codeField addTarget:self action:@selector(activationCodeEditingChanged:) forControlEvents:UIControlEventEditingChanged];
     self.codeField.text = [WFLicenseClient storedCode] ?: @"";
-    UIButton *copyCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyCodeButton.frame = CGRectMake(0, 0, 48, 56);
-    if (@available(iOS 13.0, *)) [copyCodeButton setImage:[UIImage systemImageNamed:@"doc.on.doc.fill"] forState:UIControlStateNormal];
-    copyCodeButton.backgroundColor = [WolFoxProTheme royalBlue];
-    copyCodeButton.layer.cornerRadius = 12.0;
-    copyCodeButton.tintColor = UIColor.whiteColor;
-    copyCodeButton.accessibilityLabel = @"نسخ كود التفعيل";
-    [copyCodeButton addTarget:self action:@selector(copyActivationCode) forControlEvents:UIControlEventTouchUpInside];
     self.codeField.leftView = nil;
     self.codeField.rightView = nil;
     [card addSubview:self.codeField];
