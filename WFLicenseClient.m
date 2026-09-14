@@ -578,6 +578,18 @@ static const NSUInteger kMaximumRequestAttempts = 2;
     result.updateURL = [self stringValue:data[@"update_url"]] ?: [self stringValue:json[@"update_url"]];
     result.minimumVersion = [self stringValue:data[@"minimum_version"]] ?: [self stringValue:data[@"min_version"]];
     result.forceUpdate = status == WFLicenseStatusUpdateRequired || [data[@"force_update"] boolValue];
+    NSDictionary *control = [data[@"control"] isKindOfClass:NSDictionary.class] ? data[@"control"] : @{};
+    if (control[@"enabled"] != nil) {
+        result.adminEnabled = [control[@"enabled"] boolValue];
+        if (!result.adminEnabled && result.success) {
+            result.success = NO;
+            result.status = WFLicenseStatusBlocked;
+            result.errorCode = @"admin_disabled";
+            result.message = @"تم إيقاف التشغيل من لوحة الإدارة";
+        }
+    } else {
+        result.adminEnabled = YES;
+    }
     return result;
 }
 
