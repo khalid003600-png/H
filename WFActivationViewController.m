@@ -126,7 +126,7 @@
 
     UILabel *desc = [UILabel new];
     desc.translatesAutoresizingMaskIntoConstraints = NO;
-    desc.text = @"أدخل كود التفعيل للمتابعة بأمان";
+    desc.text = @"";
     desc.textColor = [UIColor colorWithWhite:0.73 alpha:1.0];
     desc.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     desc.textAlignment = NSTextAlignmentCenter;
@@ -158,6 +158,17 @@
     self.codeField.accessibilityHint = @"اكتب الكود أو استخدم زر اللصق ثم اضغط تحقق وتفعيل";
     [self.codeField addTarget:self action:@selector(activationCodeEditingChanged:) forControlEvents:UIControlEventEditingChanged];
     self.codeField.text = [WFLicenseClient storedCode] ?: @"";
+    UIButton *copyCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    copyCodeButton.frame = CGRectMake(0, 0, 48, 56);
+    if (@available(iOS 13.0, *)) [copyCodeButton setImage:[UIImage systemImageNamed:@"doc.on.doc.fill"] forState:UIControlStateNormal];
+    copyCodeButton.backgroundColor = [WolFoxProTheme royalBlue];
+    copyCodeButton.layer.cornerRadius = 12.0;
+    copyCodeButton.tintColor = UIColor.whiteColor;
+    copyCodeButton.accessibilityLabel = @"نسخ كود التفعيل";
+    [copyCodeButton addTarget:self action:@selector(copyActivationCode) forControlEvents:UIControlEventTouchUpInside];
+    self.codeField.leftView = copyCodeButton;
+    self.codeField.leftViewMode = UITextFieldViewModeAlways;
+
     UIButton *pasteCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     pasteCodeButton.frame = CGRectMake(0, 0, 48, 56);
     if (@available(iOS 13.0, *)) {
@@ -371,6 +382,13 @@
     [self.view endEditing:YES];
 }
 
+- (void)copyActivationCode {
+    NSString *code = [self normalizedActivationCode:self.codeField.text];
+    if (!code.length) { [self showActivationError:@"لا يوجد كود لنسخه"]; return; }
+    [UIPasteboard generalPasteboard].string = code;
+    [self showTransientNotice:@"تم نسخ الكود إلى الحافظة"];
+}
+
 - (void)pasteActivationCode {
     NSString *text = [UIPasteboard generalPasteboard].string;
     if (!text.length) {
@@ -499,8 +517,8 @@
             [feedback prepare];
             [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
             
-            // يبقى ملخص التفعيل ظاهراً حتى يختار العميل عرض الأداة أو التخطي.
-            [self showToastMessage:@"تم التفعيل. راجع تفاصيل الاشتراك ثم افتح لوحة WolFox."];
+            // إشعار مستقل برسالة النجاح، وبعد موافق يفتح المنيو مباشرة.
+            [self presentResultAlertForResult:result success:YES];
             UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, self.statusLabel);
         } else {
             WFLog(@"[WolFox][ACT] server_activation_failed status=%ld", (long)result.status);
@@ -517,6 +535,7 @@
                 self.activateButton.enabled = YES;
                 [self.activateButton setTitle:@"إعادة التحقق من الكود" forState:UIControlStateNormal];
                 self.timerLabel.hidden = NO;
+                [self presentResultAlertForResult:result success:NO];
             }];
         }
     }];
@@ -608,9 +627,20 @@
     }];
 }
 
-- (void)showToastMessage:(NSString *)message {
-    // رسالة نجاح صغيرة داخل بطاقة التفعيل، بدون الاعتماد على نافذة خارجية.
+- (void)showTransientNotice:(NSString *)message {
     self.statusLabel.accessibilityValue = message;
+}
+
+- (void)presentResultAlertForResult:(WFLicenseResult *)result success:(BOOL)success {
+    NSString *title = success ? @"تم التفعيل بنجاح" : @"فشل التفعيل";
+    NSString *message = success ? [self successActivationMessage:result] : [self friendlyActivationMessage:result];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"موافق" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (success && self) [self showToolPressed];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)openUpdateURL {
