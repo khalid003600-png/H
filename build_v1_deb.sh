@@ -119,7 +119,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
 escape_objc_string() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 PANEL_BASE_URL_VALUE="${WOLFOX_PANEL_BASE_URL:-https://gps.p3nd.fun/api/v1}"
-PROJECT_KEY_VALUE="${WOLFOX_PROJECT_KEY:-}"
+PROJECT_KEY_VALUE="${WOLFOX_PROJECT_KEY:-wfpk_5af5d8d4d9283f340af3eafa43fbdc4b}"
 PROJECT_BUNDLE_ID_VALUE="${WOLFOX_PROJECT_BUNDLE_ID:-com.wolfox.gpspro}"
 [[ "$PANEL_BASE_URL_VALUE" == https://* ]] || { echo "❌ رابط اللوحة يجب أن يكون HTTPS"; exit 1; }
 [ -n "$PROJECT_KEY_VALUE" ] || { echo "❌ WOLFOX_PROJECT_KEY مفقود"; exit 1; }
