@@ -1,0 +1,45 @@
+name: Build K7GPS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/k7gps-dashboard-ui]
+    paths:
+      - 'K7GPS/**'
+      - '.github/workflows/build-k7gps.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      THEOS: ${{ github.workspace }}/.theos
+      SDK_RELEASE_TAG: master-146e41f
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clang curl dpkg-dev lld xz-utils git ca-certificates
+      - name: Install Theos SDK
+        run: |
+          git clone --depth 1 https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" "https://github.com/theos/sdks/releases/download/${SDK_RELEASE_TAG}/iPhoneOS16.5.sdk.tar.xz"
+          tar -xJf "$RUNNER_TEMP/iPhoneOS16.5.sdk.tar.xz" -C "$THEOS/sdks"
+      - name: Build K7GPS
+        run: |
+          chmod +x K7GPS/build_k7gps_deb.sh
+          K7GPS_VARIANT=dashboard K7GPS_VERSION=1.0.0 THEOS="$THEOS" SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" ./K7GPS/build_k7gps_deb.sh
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          cp K7GPS.dylib K7GPS-*.deb K7GPS-SHA256SUMS.txt artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: K7GPS-dashboard
+          path: artifacts/
+          if-no-files-found: error
