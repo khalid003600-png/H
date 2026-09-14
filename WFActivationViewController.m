@@ -570,7 +570,22 @@
     NSString *plan = result.planName.length ? result.planName : @"غير محددة";
     NSString *started = result.startedAt.length ? result.startedAt : @"غير متوفر";
     NSString *expires = result.expiresAt.length ? result.expiresAt : @"غير متوفر";
-    return [NSString stringWithFormat:@"✅ تم التفعيل بنجاح\nالباقة: %@\nبداية الاشتراك: %@\nنهاية الاشتراك: %@\nالجهاز: مرتبط ومصرّح", plan, started, expires];
+    NSString *remaining = @"غير محددة";
+    if (result.expiresAt.length) {
+        NSDateFormatter *formatter = [NSDateFormatter new];
+        formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+        formatter.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+        for (NSString *format in @[@"yyyy-MM-dd'T'HH:mm:ssXXXXX", @"yyyy-MM-dd'T'HH:mm:ssZ", @"yyyy-MM-dd HH:mm:ss", @"yyyy-MM-dd"]) {
+            formatter.dateFormat = format;
+            NSDate *date = [formatter dateFromString:result.expiresAt];
+            if (date) {
+                NSInteger days = (NSInteger)ceil([date timeIntervalSinceNow] / 86400.0);
+                remaining = days > 0 ? [NSString stringWithFormat:@"%ld يوم", (long)days] : @"منتهية";
+                break;
+            }
+        }
+    }
+    return [NSString stringWithFormat:@"✅ تم التفعيل بنجاح\nالباقة: %@\nبداية الاشتراك: %@\nنهاية الاشتراك: %@\nالمدة المتبقية: %@\nالجهاز: مرتبط ومصرّح", plan, started, expires, remaining];
 }
 
 - (UIColor *)statusColorForResult:(WFLicenseResult *)result {
