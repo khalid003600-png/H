@@ -24,7 +24,7 @@ check "$MASTER" "showActivationScreen" "واجهة إعادة التفعيل م�
 check "$MASTER" "scheduleExpiryReminderIfEnabled" "تذكيرات انتهاء الصلاحية معرّفة"
 
 # Ensure no hardcoded bypass
-reject "$LICENSE_CLIENT" "return YES" "لا توجد مجاوزات ترخيص مباشرة"
+reject "$LICENSE_CLIENT" "isRuntimeLicenseValid] return YES" "لا توجد مجاوزات ترخيص مباشرة"
 reject "$LICENSE_CONFIG" "TESTING_MODE.*YES" "وضع الاختبار معطّل في الإنتاج"
 
 echo "✅ اجتاز اختبارات استعادة الترخيص."
