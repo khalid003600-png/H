@@ -26,6 +26,23 @@
 #import "WFVirtualCameraManager.h"
 
 @class WolFoxMainViewController;
+
+typedef NS_ENUM(NSInteger, WFSaudiPlaceKind) {
+    WFSaudiPlaceKindSchool = 1,
+    WFSaudiPlaceKindMosque = 2,
+};
+
+@interface WFSaudiPlaceAnnotation : NSObject <MKAnnotation>
+@property (nonatomic, assign) CLLocationCoordinate2D coordinate;
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *subtitle;
+@property (nonatomic, copy) NSString *sourceIdentifier;
+@property (nonatomic, assign) WFSaudiPlaceKind kind;
+@end
+
+@implementation WFSaudiPlaceAnnotation
+@end
+
 static NSString * const WFUIHiddenOnLaunchKey = @"WF_UI_HIDDEN_UNTIL_VOLUME_REQUEST";
 static char kLiveLicenseValueKey;
 static char kLiveLicenseDotKey;
@@ -128,6 +145,7 @@ static BOOL WFMasterProcessIsEligible(void) {
 - (void)presentOnboardingIfNeeded;
 - (void)refreshVirtualCameraPage;
 - (void)openGPSPage;
+- (void)searchOpenStreetMapForQuery:(NSString *)query searchBar:(UISearchBar *)searchBar;
 - (void)volumePressCountChanged:(UISegmentedControl *)control;
 - (void)floatingIconSizeChanged:(UISegmentedControl *)control;
 - (void)floatingIconOpacityChanged:(UISlider *)slider;
@@ -208,6 +226,10 @@ static BOOL WFMasterProcessIsEligible(void) {
     UILabel *_cameraStateLabel;
     UIButton *_cameraToggleButton;
     UISwitch *_cameraRememberSwitch;
+    NSURLSessionDataTask *_saudiPlacesTask;
+    NSTimer *_saudiPlacesReloadTimer;
+    UILabel *_saudiPlacesStatusLabel;
+    BOOL _saudiPlacesPageActive;
 }
 
 - (void)viewDidLoad {
@@ -231,6 +253,8 @@ static BOOL WFMasterProcessIsEligible(void) {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"WF_BT_PROFILE_DEACTIVATED" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:WFVirtualCameraStateDidChangeNotification object:nil];
     [_activeMapSearch cancel];
+    [_saudiPlacesTask cancel];
+    [_saudiPlacesReloadTimer invalidate];
     [_realLocManager stopUpdatingLocation];
     _realLocManager.delegate = nil;
     _btManager.delegate = nil;
@@ -274,10 +298,11 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.view addSubview:_onboardingOverlay];
 
 #if WOLFOX_LITE
-    NSArray<NSString *> *titles = @[@"مرحباً بك في WolFox Lite", @"الموقع والمفضلة", @"الإعدادات والإخفاء"];
+    NSArray<NSString *> *titles = @[@"مرحباً بك في WolFox Lite", @"الموقع والمفضلة", @"خريطة المدارس والمساجد", @"الإعدادات والإخفاء"];
     NSArray<NSString *> *messages = @[
         @"هذه جولة إرشادية قصيرة لشرح وظائف نسخة Lite. يمكنك الضغط على تخطي في أي وقت.",
         @"استخدم الخريطة والبحث والإحداثيات والمفضلة لتحديد الموقع وتشغيل الوظائف المرتبطة به.",
+        @"استكشف المدارس والمساجد في المملكة بعلامات واضحة، وقرّب الخريطة لعرض تفاصيل أكثر.",
         @"من الإعدادات راجع حالة الاشتراك، تحكم في الإخفاء، وتحقق من إصدار WolFox Lite."
     ];
     NSString *onboardingEdition = @"WOLFOX LITE";
@@ -406,7 +431,7 @@ static BOOL WFMasterProcessIsEligible(void) {
     [self.view addSubview:_tabsBar];
     
 #if WOLFOX_LITE
-    UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 2.0, 4)];
+    UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 3.0, 4)];
 #else
     UIView *indicator = [[UIView alloc] initWithFrame:CGRectMake(0, 54, w / 5.0, 4)];
 #endif
@@ -415,9 +440,9 @@ static BOOL WFMasterProcessIsEligible(void) {
     [_tabsBar addSubview:indicator];
     
 #if WOLFOX_LITE
-    NSArray *icons = @[@"location.fill", @"gearshape.fill"];
-    NSArray *tabLabels = @[@"الموقع والمفضلة", @"الإعدادات والإخفاء"];
-    NSArray *tabPages = @[@0, @4];
+    NSArray *icons = @[@"location.fill", @"map.fill", @"gearshape.fill"];
+    NSArray *tabLabels = @[@"الموقع والمفضلة", @"خريطة المدارس والمساجد", @"الإعدادات والإخفاء"];
+    NSArray *tabPages = @[@0, @5, @4];
 #else
     NSArray *icons = @[@"location.fill", @"person.text.rectangle.fill", @"antenna.radiowaves.left.and.right", @"camera.fill", @"gearshape.fill"];
     NSArray *tabLabels = @[@"الموقع GPS", @"معرف الجهاز", @"البلوتوث", @"الكاميرا", @"الإعدادات"];
@@ -564,7 +589,7 @@ static BOOL WFMasterProcessIsEligible(void) {
         for (UIView *v in _tabsBar.subviews) { if (v.frame.size.height == 3) { indicator = v; break; } }
     }
 
-    // يحسب موضع المؤشر من الزر الفعلي؛ يدعم Full بخمسة أقسام وLite بقسمين.
+    // يحسب موضع المؤشر من الزر الفعلي؛ يدعم Full بخمسة أقسام وLite بثلاثة أقسام.
     CGFloat tabCount = MAX((CGFloat)_tabBtns.count, 1.0);
     NSInteger tabIndex = 0;
     for (NSUInteger index = 0; index < _tabBtns.count; index++) {
@@ -583,6 +608,14 @@ static BOOL WFMasterProcessIsEligible(void) {
     }
 
     for (UIView *v in _scrollDashboard.subviews) [v removeFromSuperview];
+    _saudiPlacesPageActive = (page == 5);
+    if (!_saudiPlacesPageActive) {
+        [_saudiPlacesTask cancel];
+        _saudiPlacesTask = nil;
+        [_saudiPlacesReloadTimer invalidate];
+        _saudiPlacesReloadTimer = nil;
+        _saudiPlacesStatusLabel = nil;
+    }
     if (page != 3) {
         _cameraPreviewImageView = nil;
         _cameraStateLabel = nil;
@@ -612,6 +645,171 @@ static BOOL WFMasterProcessIsEligible(void) {
     else if (page == 2) [self setupBluetoothPage];
     else if (page == 3) [self setupCameraPage];
     else if (page == 4) [self setupSettingsPage];
+    else if (page == 5) [self setupSaudiPlacesMapPage];
+}
+
+#pragma mark - Saudi Schools & Mosques Map (Lite)
+
+- (void)setupSaudiPlacesMapPage {
+    CGFloat w = _scrollDashboard.bounds.size.width;
+    UIView *card = [[UIView alloc] initWithFrame:CGRectMake(12, 10, w - 24, MAX(_scrollDashboard.bounds.size.height - 24, 430))];
+    card.backgroundColor = [WolFoxProTheme surfacePrimary];
+    card.layer.cornerRadius = 18;
+    card.clipsToBounds = YES;
+    [_scrollDashboard addSubview:card];
+    _scrollDashboard.contentSize = CGSizeMake(w, CGRectGetMaxY(card.frame) + 12);
+
+    self.mapView = [[MKMapView alloc] initWithFrame:card.bounds];
+    self.mapView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.mapView.delegate = self;
+    self.mapView.mapType = (MKMapType)[WolFoxProStore shared].mapStyle;
+    [card addSubview:self.mapView];
+
+    self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(8, 8, card.bounds.size.width - 16, 44)];
+    self.searchBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.searchBar.delegate = self;
+    self.searchBar.placeholder = @"ابحث عن مدرسة، مسجد، مدينة أو عنوان";
+    self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    self.searchBar.keyboardAppearance = UIKeyboardAppearanceDark;
+    self.searchBar.returnKeyType = UIReturnKeySearch;
+    self.searchBar.accessibilityLabel = @"البحث في خريطة المدارس والمساجد";
+    if (@available(iOS 13.0, *)) {
+        self.searchBar.searchTextField.backgroundColor = [[WolFoxProTheme surfaceSecondary] colorWithAlphaComponent:0.94];
+        self.searchBar.searchTextField.textColor = [WolFoxProTheme textPrimary];
+        [self configureKeyboardToolbarForTextField:self.searchBar.searchTextField searchMode:YES];
+    }
+    [card addSubview:self.searchBar];
+
+    UIView *legend = [[UIView alloc] initWithFrame:CGRectMake(10, 60, card.bounds.size.width - 20, 62)];
+    legend.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    legend.backgroundColor = [[WolFoxProTheme surfaceSecondary] colorWithAlphaComponent:0.92];
+    legend.layer.cornerRadius = 12;
+    [card addSubview:legend];
+    UILabel *legendTitle = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, legend.bounds.size.width - 20, 25)];
+    legendTitle.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    legendTitle.text = @"🏫 مدرسة حكومية أو أهلية   •   🕌 مسجد";
+    legendTitle.textColor = [WolFoxProTheme textPrimary];
+    legendTitle.font = [WolFoxProTheme fontOfSize:13 weight:UIFontWeightBold];
+    legendTitle.textAlignment = NSTextAlignmentCenter;
+    [legend addSubview:legendTitle];
+    _saudiPlacesStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(8, 31, legend.bounds.size.width - 16, 23)];
+    _saudiPlacesStatusLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    _saudiPlacesStatusLabel.text = @"قرّب الخريطة لعرض المدارس، وقرّب أكثر لعرض المساجد";
+    _saudiPlacesStatusLabel.textColor = [WolFoxProTheme textSecondary];
+    _saudiPlacesStatusLabel.font = [WolFoxProTheme fontOfSize:10 weight:UIFontWeightSemibold];
+    _saudiPlacesStatusLabel.textAlignment = NSTextAlignmentCenter;
+    [legend addSubview:_saudiPlacesStatusLabel];
+
+    UIButton *styleBtn = [self mapCircleBtn:@"map.fill" x:10 y:card.bounds.size.height - 54];
+    styleBtn.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin;
+    styleBtn.accessibilityLabel = @"تغيير نمط الخريطة: عادي أو قمر صناعي أو هجين";
+    [styleBtn addTarget:self action:@selector(toggleMapStyle) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:styleBtn];
+
+    UIButton *realLocBtn = [self mapCircleBtn:@"location.fill" x:card.bounds.size.width - 54 y:card.bounds.size.height - 54];
+    realLocBtn.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
+    realLocBtn.accessibilityLabel = @"التمركز على موقعي";
+    [realLocBtn addTarget:self action:@selector(showRealLocation) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:realLocBtn];
+
+    CLLocationCoordinate2D center = CLLocationCoordinate2DMake(23.8859, 45.0792);
+    [self.mapView setRegion:MKCoordinateRegionMake(center, MKCoordinateSpanMake(17.0, 18.0)) animated:NO];
+    [self scheduleSaudiPlacesReload];
+}
+
+- (void)scheduleSaudiPlacesReload {
+    if (!_saudiPlacesPageActive || !self.mapView) return;
+    [_saudiPlacesReloadTimer invalidate];
+    _saudiPlacesReloadTimer = [NSTimer scheduledTimerWithTimeInterval:0.65 target:self selector:@selector(loadSaudiPlacesForVisibleRegion) userInfo:nil repeats:NO];
+}
+
+- (void)loadSaudiPlacesForVisibleRegion {
+    if (!_saudiPlacesPageActive || !self.mapView) return;
+    MKCoordinateRegion region = self.mapView.region;
+    double lonDelta = fabs(region.span.longitudeDelta);
+    BOOL includeSchools = lonDelta <= 6.0;
+    BOOL includeMosques = lonDelta <= 1.5;
+    NSPredicate *placesPredicate = [NSPredicate predicateWithBlock:^BOOL(id object, NSDictionary *bindings) {
+        return [object isKindOfClass:WFSaudiPlaceAnnotation.class];
+    }];
+    if (!includeSchools) {
+        _saudiPlacesStatusLabel.text = @"قرّب الخريطة لعرض المدارس، وقرّب أكثر لعرض المساجد";
+        [self.mapView removeAnnotations:[self.mapView.annotations filteredArrayUsingPredicate:placesPredicate]];
+        return;
+    }
+
+    double south = MAX(region.center.latitude - region.span.latitudeDelta / 2.0, 16.0);
+    double north = MIN(region.center.latitude + region.span.latitudeDelta / 2.0, 33.5);
+    double west = MAX(region.center.longitude - region.span.longitudeDelta / 2.0, 34.0);
+    double east = MIN(region.center.longitude + region.span.longitudeDelta / 2.0, 56.0);
+    if (south >= north || west >= east) {
+        _saudiPlacesStatusLabel.text = @"حرّك الخريطة إلى داخل المملكة العربية السعودية";
+        return;
+    }
+
+    NSString *bbox = [NSString stringWithFormat:@"%.5f,%.5f,%.5f,%.5f", south, west, north, east];
+    NSMutableString *body = [NSMutableString stringWithFormat:@"node[\"amenity\"=\"school\"](%@);way[\"amenity\"=\"school\"](%@);relation[\"amenity\"=\"school\"](%@);", bbox, bbox, bbox];
+    if (includeMosques) {
+        [body appendFormat:@"node[\"amenity\"=\"place_of_worship\"][\"religion\"=\"muslim\"](%@);way[\"amenity\"=\"place_of_worship\"][\"religion\"=\"muslim\"](%@);relation[\"amenity\"=\"place_of_worship\"][\"religion\"=\"muslim\"](%@);", bbox, bbox, bbox];
+    }
+    NSString *query = [NSString stringWithFormat:@"[out:json][timeout:20];(%@);out center tags;", body];
+    NSURL *url = [NSURL URLWithString:@"https://overpass-api.de/api/interpreter"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:25.0];
+    request.HTTPMethod = @"POST";
+    NSCharacterSet *allowed = [NSCharacterSet URLQueryAllowedCharacterSet];
+    request.HTTPBody = [[NSString stringWithFormat:@"data=%@", [query stringByAddingPercentEncodingWithAllowedCharacters:allowed]] dataUsingEncoding:NSUTF8StringEncoding];
+    [request setValue:@"application/x-www-form-urlencoded; charset=utf-8" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:@"WolFoxLite/1.8.6 (Saudi places map)" forHTTPHeaderField:@"User-Agent"];
+    [_saudiPlacesTask cancel];
+    _saudiPlacesStatusLabel.text = includeMosques ? @"جارٍ تحميل المدارس والمساجد الظاهرة…" : @"جارٍ تحميل المدارس الظاهرة… قرّب أكثر للمساجد";
+    __weak typeof(self) weakSelf = self;
+    _saudiPlacesTask = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSArray *elements = [json isKindOfClass:NSDictionary.class] ? json[@"elements"] : nil;
+        NSMutableArray<WFSaudiPlaceAnnotation *> *annotations = [NSMutableArray new];
+        NSMutableSet<NSString *> *seen = [NSMutableSet new];
+        for (NSDictionary *element in elements) {
+            NSDictionary *tags = element[@"tags"];
+            NSDictionary *centerValue = element[@"center"];
+            NSNumber *lat = element[@"lat"] ?: centerValue[@"lat"];
+            NSNumber *lon = element[@"lon"] ?: centerValue[@"lon"];
+            if (!lat || !lon) continue;
+            NSString *identifier = [NSString stringWithFormat:@"%@/%@", element[@"type"] ?: @"poi", element[@"id"] ?: @0];
+            if ([seen containsObject:identifier]) continue;
+            [seen addObject:identifier];
+            BOOL mosque = [tags[@"amenity"] isEqual:@"place_of_worship"];
+            WFSaudiPlaceAnnotation *annotation = [WFSaudiPlaceAnnotation new];
+            annotation.coordinate = CLLocationCoordinate2DMake(lat.doubleValue, lon.doubleValue);
+            annotation.kind = mosque ? WFSaudiPlaceKindMosque : WFSaudiPlaceKindSchool;
+            NSString *name = tags[@"name:ar"] ?: tags[@"name"];
+            annotation.title = name.length ? name : (mosque ? @"مسجد" : @"مدرسة");
+            annotation.subtitle = mosque ? @"هنا يوجد مسجد" : @"هنا توجد مدرسة";
+            annotation.sourceIdentifier = identifier;
+            [annotations addObject:annotation];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self || !self->_saudiPlacesPageActive) return;
+            self->_saudiPlacesTask = nil;
+            if (error || !elements) {
+                self->_saudiPlacesStatusLabel.text = @"تعذر تحميل المعالم الآن — حرّك الخريطة للمحاولة مجدداً";
+                return;
+            }
+            NSArray *oldPlaces = [self.mapView.annotations filteredArrayUsingPredicate:placesPredicate];
+            [self.mapView removeAnnotations:oldPlaces];
+            [self.mapView addAnnotations:annotations];
+            NSUInteger schools = 0, mosques = 0;
+            for (WFSaudiPlaceAnnotation *place in annotations) {
+                if (place.kind == WFSaudiPlaceKindMosque) mosques++; else schools++;
+            }
+            self->_saudiPlacesStatusLabel.text = [NSString stringWithFormat:@"المعروض: %lu مدرسة • %lu مسجد — البيانات: OpenStreetMap", (unsigned long)schools, (unsigned long)mosques];
+        });
+    }];
+    [_saudiPlacesTask resume];
+}
+
+- (void)mapView:(MKMapView *)mapView regionDidChangeAnimated:(BOOL)animated {
+    if (_saudiPlacesPageActive && mapView == self.mapView) [self scheduleSaudiPlacesReload];
 }
 
 #pragma mark - Bluetooth Page
@@ -2253,7 +2451,7 @@ static BOOL WFMasterProcessIsEligible(void) {
                         CLPlacemark *placemark = placemarks.firstObject;
                         CLLocation *fallbackLocation = placemark.location;
                         if (!fallbackLocation || geocodeError) {
-                            [self showToast:@"لم يتم العثور على العنوان أو المكان ❌"];
+                            [self searchOpenStreetMapForQuery:query searchBar:searchBar];
                             return;
                         }
                         NSString *fallbackTitle = placemark.name.length ? placemark.name : query;
@@ -2268,6 +2466,34 @@ static BOOL WFMasterProcessIsEligible(void) {
             [self selectMapSearchCoordinate:location.coordinate title:title toast:@"تم العثور على المكان وتحديده ✅"];
         });
     }];
+}
+
+- (void)searchOpenStreetMapForQuery:(NSString *)query searchBar:(UISearchBar *)searchBar {
+    NSString *combined = [NSString stringWithFormat:@"%@، المملكة العربية السعودية", query];
+    NSString *encoded = [combined stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
+    NSString *urlString = [NSString stringWithFormat:@"https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=sa&accept-language=ar&q=%@", encoded ?: @""];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString] cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:15.0];
+    [request setValue:@"WolFoxLite/1.8.6 (Saudi map search)" forHTTPHeaderField:@"User-Agent"];
+    __weak typeof(self) weakSelf = self;
+    NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSArray *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        NSDictionary *item = [json isKindOfClass:NSArray.class] ? json.firstObject : nil;
+        double latitude = [item[@"lat"] doubleValue];
+        double longitude = [item[@"lon"] doubleValue];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake(latitude, longitude);
+            if (error || !item || !CLLocationCoordinate2DIsValid(coordinate)) {
+                [self showToast:@"لم يتم العثور على العنوان أو المكان ❌"];
+                return;
+            }
+            NSString *displayName = item[@"display_name"] ?: query;
+            searchBar.text = displayName;
+            [self selectMapSearchCoordinate:coordinate title:displayName toast:@"تم العثور على المكان عبر OpenStreetMap ✅"];
+        });
+    }];
+    [task resume];
 }
 
 - (UITextField *)royalInput:(NSString *)p frame:(CGRect)f {
@@ -3624,6 +3850,33 @@ static BOOL WFMasterProcessIsEligible(void) {
 }
 
 - (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id<MKAnnotation>)annotation {
+    if ([annotation isKindOfClass:WFSaudiPlaceAnnotation.class]) {
+        WFSaudiPlaceAnnotation *place = (WFSaudiPlaceAnnotation *)annotation;
+        BOOL school = place.kind == WFSaudiPlaceKindSchool;
+        NSString *reuse = school ? @"saudi_school" : @"saudi_mosque";
+        MKMarkerAnnotationView *marker = (MKMarkerAnnotationView *)[mapView dequeueReusableAnnotationViewWithIdentifier:reuse];
+        if (!marker) marker = [[MKMarkerAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:reuse];
+        marker.annotation = annotation;
+        marker.markerTintColor = school ? [UIColor colorWithRed:0.08 green:0.55 blue:0.29 alpha:1.0] : [UIColor colorWithRed:0.05 green:0.43 blue:0.48 alpha:1.0];
+        marker.glyphText = school ? @"🏫" : @"🕌";
+        marker.glyphTintColor = UIColor.whiteColor;
+        marker.canShowCallout = YES;
+        marker.displayPriority = school ? MKFeatureDisplayPriorityDefaultHigh : MKFeatureDisplayPriorityDefaultLow;
+        marker.clusteringIdentifier = school ? @"schools" : @"mosques";
+        marker.accessibilityLabel = [NSString stringWithFormat:@"%@، %@", place.title, place.subtitle];
+        if (school && ![marker.layer animationForKey:@"wf_school_pulse"]) {
+            CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+            pulse.fromValue = @1.0;
+            pulse.toValue = @1.14;
+            pulse.duration = 0.85;
+            pulse.autoreverses = YES;
+            pulse.repeatCount = HUGE_VALF;
+            [marker.layer addAnimation:pulse forKey:@"wf_school_pulse"];
+        } else if (!school) {
+            [marker.layer removeAnimationForKey:@"wf_school_pulse"];
+        }
+        return marker;
+    }
     if ([annotation isKindOfClass:[MKPointAnnotation class]]) {
         // ADDED: دبوس نقطة الهدف (خط الوصول)
         MKPointAnnotation *targetPin = objc_getAssociatedObject(self, "_target_pin");
