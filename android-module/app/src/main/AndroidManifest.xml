@@ -19,16 +19,16 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
-    <!-- LSPosed Module Metadata -->
-    <meta-data android:name="xposedmodule"       android:value="true" />
-    <meta-data android:name="xposeddescription"  android:value="WolFox GPS v3 — no root LSPatch" />
-    <meta-data android:name="xposedminversion"   android:value="93" />
-
     <application
         android:allowBackup="false"
         android:label="WolFox GPS"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true">
+
+        <!-- LSPosed Module Metadata -->
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="WolFox GPS v4 — LSPatch/LSPosed module" />
+        <meta-data android:name="xposedminversion" android:value="93" />
 
         <!-- خدمة الأذان في الخلفية -->
         <service
