@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ألوان WolFox الأساسية -->
+    <color name="wf_bg">#070B18</color>
+    <color name="wf_gold">#C9A227</color>
+    <color name="wf_white">#FFFFFF</color>
+    <color name="wf_card">#0E1428</color>
+    <color name="wf_dark">#1A1A2E</color>
+
+    <!-- حالات -->
+    <color name="wf_green">#388E3C</color>
+    <color name="wf_red">#D32F2F</color>
+    <color name="wf_orange">#FF9800</color>
+    <color name="wf_gray">#888888</color>
+    <color name="wf_dark_gray">#444444</color>
+</resources>
