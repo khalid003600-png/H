@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WolFox GPS</title>
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<!-- Cairo Font -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap"/>
+<style>
+:root {
+  --navy:  #070b18;
+  --navy2: #0e1428;
+  --navy3: #1a2040;
+  --gold:  #c9a227;
+  --gold2: #e8bc30;
+  --white: #ffffff;
+  --green: #22c55e;
+  --red:   #ef4444;
+  --blue:  #3b82f6;
+  --gray:  #6b7280;
+  --radius:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--navy);font-family:'Cairo',sans-serif;direction:rtl;}
+#map{position:absolute;inset:0;z-index:1;}
+
+/* ══ Toolbar ══ */
+#toolbar{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(7,11,24,0.96);
+  backdrop-filter:blur(8px);
+  padding:8px 10px 6px;
+  display:flex;flex-direction:column;gap:5px;
+  border-bottom:1px solid rgba(201,162,39,0.3);
+}
+
+/* صف الحالة */
+#status-row{display:flex;align-items:center;gap:8px;padding:0 2px;}
+#gps-icon{font-size:18px;transition:color .4s;}
+#gps-icon.active{color:var(--green);filter:drop-shadow(0 0 6px var(--green));}
+#gps-icon.inactive{color:var(--red);filter:drop-shadow(0 0 6px var(--red));}
+#status-label{font-size:13px;font-weight:700;flex:1;}
+#status-label.active{color:var(--green);}
+#status-label.inactive{color:var(--red);}
+#coords-badge{
+  font-size:10px;color:var(--gold);background:var(--navy2);
+  padding:3px 8px;border-radius:20px;border:1px solid rgba(201,162,39,0.4);
+  font-family:monospace;letter-spacing:.5px;
+}
+
+/* صف البحث */
+#search-row{display:flex;gap:6px;}
+#search-wrap{flex:1;position:relative;}
+#search-input{
+  width:100%;padding:8px 36px 8px 10px;
+  border-radius:var(--radius);
+  background:var(--navy2);color:var(--white);
+  border:1px solid rgba(201,162,39,0.35);
+  font-size:13px;font-family:'Cairo',sans-serif;outline:none;
+}
+#search-input::placeholder{color:var(--gray);}
+#search-clear{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  color:var(--gray);font-size:13px;cursor:pointer;display:none;
+}
+.btn{
+  display:flex;align-items:center;gap:5px;
+  padding:8px 12px;border-radius:var(--radius);border:none;
+  cursor:pointer;font-size:12px;font-weight:700;
+  font-family:'Cairo',sans-serif;white-space:nowrap;transition:opacity .15s;
+}
+.btn:active{opacity:.75;}
+.btn-gold{background:var(--gold);color:var(--navy);}
+.btn-card{background:var(--navy2);color:var(--white);border:1px solid var(--navy3);}
+.btn-green{background:#166534;color:#86efac;}
+.btn-red{background:#7f1d1d;color:#fca5a5;}
+
+/* صف الخرائط */
+#layers-row{display:flex;gap:4px;overflow-x:auto;padding-bottom:1px;}
+#layers-row::-webkit-scrollbar{display:none;}
+.layer-btn{
+  flex-shrink:0;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;
+  font-size:11px;font-family:'Cairo',sans-serif;font-weight:600;
+  background:var(--navy3);color:var(--gray);transition:all .2s;
+}
+.layer-btn.active{background:var(--gold);color:var(--navy);}
+
+/* ══ Toast ══ */
+#toast-wrap{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  z-index:999;display:flex;flex-direction:column;align-items:center;gap:6px;
+  pointer-events:none;
+}
+.toast{
+  padding:9px 18px;border-radius:24px;
+  font-size:13px;font-weight:700;font-family:'Cairo',sans-serif;
+  opacity:0;transform:translateY(10px);
+  transition:all .3s;pointer-events:none;
+  display:flex;align-items:center;gap:7px;
+}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{background:#166534;color:#86efac;border:1px solid #22c55e;}
+.toast.error{background:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;}
+.toast.info{background:var(--navy2);color:var(--gold);border:1px solid var(--gold);}
+
+/* ══ Pin Card ══ */
+#pin-card{
+  position:fixed;bottom:64px;left:8px;right:8px;z-index:200;
+  background:rgba(14,20,40,0.97);border:1px solid rgba(201,162,39,0.5);
+  border-radius:16px;padding:14px;
+  transform:translateY(20px);opacity:0;pointer-events:none;
+  transition:all .3s;
+}
+#pin-card.show{transform:translateY(0);opacity:1;pointer-events:auto;}
+#pin-name{color:var(--gold);font-size:14px;font-weight:700;margin-bottom:3px;}
+#pin-coords{color:var(--white);font-size:11px;font-family:monospace;margin-bottom:10px;opacity:.8;}
+#pin-btns{display:flex;gap:6px;flex-wrap:wrap;}
+
+/* ══ Search Results ══ */
+#results-box{
+  position:fixed;top:130px;left:8px;right:8px;z-index:300;
+  background:var(--navy2);border:1px solid rgba(201,162,39,0.4);
+  border-radius:var(--radius);max-height:180px;overflow-y:auto;display:none;
+}
+.res-item{
+  padding:10px 12px;border-bottom:1px solid var(--navy3);
+  color:var(--white);font-size:12px;cursor:pointer;
+  display:flex;align-items:center;gap:8px;transition:background .15s;
+}
+.res-item:hover{background:var(--navy3);}
+.res-item:last-child{border:none;}
+.res-icon{color:var(--gold);font-size:12px;flex-shrink:0;}
+
+/* ══ Status Bar ══ */
+#statusbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:100;
+  background:rgba(7,11,24,0.97);
+  border-top:1px solid rgba(201,162,39,0.2);
+  padding:6px 12px;
+  display:flex;align-items:center;gap:8px;
+  height:52px;
+}
+#sb-gps{font-size:20px;}
+#sb-gps.active{color:var(--green);animation:pulse 2s infinite;}
+#sb-gps.inactive{color:var(--red);}
+#sb-text{font-size:12px;font-weight:600;flex:1;}
+#sb-coords{font-size:10px;color:var(--gold);font-family:monospace;}
+#sb-actions{display:flex;gap:5px;}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ══ Spinner ══ */
+#spinner{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:999;display:none;flex-direction:column;align-items:center;gap:8px;
+}
+.spin-ring{
+  width:40px;height:40px;border-radius:50%;
+  border:3px solid var(--navy3);border-top-color:var(--gold);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#spinner-text{color:var(--gold);font-size:12px;font-weight:700;}
+
+/* Leaflet overrides */
+.leaflet-control-attribution{display:none!important;}
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <div id="status-row">
+    <i id="gps-icon" class="fa-solid fa-location-dot inactive"></i>
+    <span id="status-label" class="inactive">التزييف متوقف</span>
+    <span id="coords-badge" id="coords-badge">-- ، --</span>
+  </div>
+  <div id="search-row">
+    <div id="search-wrap">
+      <input id="search-input" type="text" placeholder="🔍 ابحث بالعنوان أو الإحداثيات..."/>
+      <i id="search-clear" class="fa-solid fa-xmark"></i>
+    </div>
+    <button class="btn btn-gold" onclick="doSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+    <button class="btn btn-card" onclick="useRealGPS()"><i class="fa-solid fa-crosshairs"></i></button>
+  </div>
+  <div id="layers-row">
+    <button class="layer-btn active" id="l-osm"       onclick="setLayer('osm')">🗺 عادي</button>
+    <button class="layer-btn"        id="l-satellite"  onclick="setLayer('satellite')">🛰 قمر</button>
+    <button class="layer-btn"        id="l-dark"       onclick="setLayer('dark')">🌙 داكن</button>
+    <button class="layer-btn"        id="l-topo"       onclick="setLayer('topo')">🏔 طبوغرافي</button>
+    <button class="layer-btn"        id="l-streets"    onclick="setLayer('streets')">🛣 شوارع</button>
+    <button class="layer-btn"        id="l-terrain"    onclick="setLayer('terrain')">🌿 تضاريس</button>
+    <button class="layer-btn"        id="l-watercolor" onclick="setLayer('watercolor')">🎨 مائي</button>
+    <button class="layer-btn"        id="l-cycle"      onclick="setLayer('cycle')">🚴 دراجات</button>
+  </div>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- Spinner -->
+<div id="spinner">
+  <div class="spin-ring"></div>
+  <div id="spinner-text">جاري البحث...</div>
+</div>
+
+<!-- Search Results -->
+<div id="results-box"></div>
+
+<!-- Toast -->
+<div id="toast-wrap"></div>
+
+<!-- Pin Card -->
+<div id="pin-card">
+  <div id="pin-name"><i class="fa-solid fa-location-dot" style="color:var(--gold)"></i> <span id="pin-name-text">موقع محدد</span></div>
+  <div id="pin-coords">-- ، --</div>
+  <div id="pin-btns">
+    <button class="btn btn-green" onclick="applyMock()"><i class="fa-solid fa-play"></i> تطبيق التزييف</button>
+    <button class="btn btn-gold"  onclick="saveFav()"><i class="fa-solid fa-star"></i> حفظ</button>
+    <button class="btn btn-card"  onclick="closePinCard()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+</div>
+
+<!-- Status Bar -->
+<div id="statusbar">
+  <i id="sb-gps" class="fa-solid fa-satellite-dish inactive"></i>
+  <span id="sb-text" style="color:var(--red)">التزييف متوقف</span>
+  <span id="sb-coords">-- ، --</span>
+  <div id="sb-actions">
+    <button class="btn btn-green" style="padding:5px 10px;font-size:11px;" onclick="startMockFromBar()">
+      <i class="fa-solid fa-play"></i> ابدأ
+    </button>
+    <button class="btn btn-red" style="padding:5px 10px;font-size:11px;" onclick="stopMockFromBar()">
+      <i class="fa-solid fa-stop"></i> إيقاف
+    </button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  State
+// ══════════════════════════════════════════
+var isMocking   = false;
+var mockLat     = null, mockLng = null, mockLabel = '';
+var realLat     = null, realLng = null;
+var selectedLat = null, selectedLng = null, selectedLabel = '';
+var currentLayerName = 'osm';
+var pinMarker   = null;
+var realDot     = null; // النقطة الزرقاء
+
+// ══════════════════════════════════════════
+//  Map Init
+// ══════════════════════════════════════════
+var map = L.map('map',{center:[24.7136,46.6753],zoom:13,zoomControl:false,attributionControl:false});
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+var layers = {
+  osm:        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}),
+  satellite:  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18}),
+  dark:       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}),
+  topo:       L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17}),
+  streets:    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19}),
+  terrain:    L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg',{maxZoom:14}),
+  watercolor: L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',{maxZoom:16}),
+  cycle:      L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',{maxZoom:19})
+};
+layers['osm'].addTo(map);
+
+function setLayer(name){
+  if(!layers[name])return;
+  map.removeLayer(layers[currentLayerName]);
+  layers[name].addTo(map);
+  currentLayerName=name;
+  document.querySelectorAll('.layer-btn').forEach(function(b){b.classList.remove('active');});
+  var btn=document.getElementById('l-'+name);
+  if(btn)btn.classList.add('active');
+  showToast('info','<i class="fa-solid fa-map"></i> تم تغيير الخريطة');
+}
+
+// ══════════════════════════════════════════
+//  Icons
+// ══════════════════════════════════════════
+var goldPin = L.divIcon({
+  html:'<i class="fa-solid fa-location-dot" style="color:#c9a227;font-size:32px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))"></i>',
+  className:'',iconAnchor:[10,32],iconSize:[20,32]
+});
+
+// النقطة الزرقاء — الموقع الحقيقي
+var blueCircle = L.divIcon({
+  html:'<div style="width:16px;height:16px;border-radius:50%;background:#3b82f6;border:2.5px solid #fff;box-shadow:0 0 0 4px rgba(59,130,246,.3)"></div>',
+  className:'',iconAnchor:[8,8],iconSize:[16,16]
+});
+
+// ══════════════════════════════════════════
+//  Real GPS — النقطة الزرقاء
+// ══════════════════════════════════════════
+function startRealGPSTracking(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.watchPosition(function(pos){
+    realLat = pos.coords.latitude;
+    realLng = pos.coords.longitude;
+    updateRealDot();
+  },null,{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+}
+
+function updateRealDot(){
+  if(realLat===null||realLng===null)return;
+  // أظهر النقطة الزرقاء دائماً — مرفوعة فوق الدبوس
+  if(!realDot){
+    realDot = L.marker([realLat,realLng],{icon:blueCircle,zIndexOffset:-100}).addTo(map);
+  } else {
+    realDot.setLatLng([realLat,realLng]);
+  }
+}
+
+function useRealGPS(){
+  if(!navigator.geolocation){showToast('error','<i class="fa-solid fa-ban"></i> GPS غير متاح');return;}
+  setSpinner(true,'جاري تحديد موقعك...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    setSpinner(false);
+    realLat=pos.coords.latitude; realLng=pos.coords.longitude;
+    updateRealDot();
+    map.setView([realLat,realLng],16);
+    placePin(realLat,realLng,'موقعي الحالي');
+    showToast('success','<i class="fa-solid fa-crosshairs"></i> تم تحديد موقعك الحقيقي');
+  },function(e){
+    setSpinner(false);
+    showToast('error','<i class="fa-solid fa-triangle-exclamation"></i> تعذر تحديد الموقع');
+  },{enableHighAccuracy:true,timeout:12000});
+}
+
+// ══════════════════════════════════════════
+//  Pin
+// ══════════════════════════════════════════
+function placePin(lat,lng,label){
+  selectedLat=lat; selectedLng=lng; selectedLabel=label||'';
+  if(pinMarker)map.removeLayer(pinMarker);
+  pinMarker=L.marker([lat,lng],{icon:goldPin,draggable:true,zIndexOffset:100}).addTo(map);
+
+  pinMarker.on('dragend',function(e){
+    var p=e.target.getLatLng();
+    selectedLat=p.lat; selectedLng=p.lng;
+    reverseGeocode(p.lat,p.lng,function(name){
+      selectedLabel=name;
+      updatePinCard(p.lat,p.lng,name);
+    });
+    updatePinCard(p.lat,p.lng,selectedLabel);
+  });
+
+  updatePinCard(lat,lng,label);
+  document.getElementById('pin-card').classList.add('show');
+  notifyAndroid('pin',{lat:lat,lng:lng,label:label});
+}
+
+function updatePinCard(lat,lng,label){
+  var name=label&&label.length>0?label:(lat.toFixed(5)+' ، '+lng.toFixed(5));
+  if(name.length>55)name=name.substring(0,52)+'...';
+  document.getElementById('pin-name-text').textContent=name;
+  document.getElementById('pin-coords').textContent=
+    lat.toFixed(6)+' ، '+lng.toFixed(6);
+}
+
+function closePinCard(){document.getElementById('pin-card').classList.remove('show');}
+
+map.on('click',function(e){
+  hideResults();
+  placePin(e.latlng.lat,e.latlng.lng,'');
+  reverseGeocode(e.latlng.lat,e.latlng.lng,function(name){
+    selectedLabel=name;
+    updatePinCard(e.latlng.lat,e.latlng.lng,name);
+  });
+});
+
+// ══════════════════════════════════════════
+//  Reverse Geocode
+// ══════════════════════════════════════════
+function reverseGeocode(lat,lng,cb){
+  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lng,
+    {headers:{'Accept-Language':'ar,en','User-Agent':'WolFoxGPS/4.0'}})
+  .then(function(r){return r.json();})
+  .then(function(d){cb(d.display_name||'');})
+  .catch(function(){cb('');});
+}
+
+// ══════════════════════════════════════════
+//  Search
+// ══════════════════════════════════════════
+document.getElementById('search-input').addEventListener('input',function(){
+  document.getElementById('search-clear').style.display=this.value?'block':'none';
+});
+document.getElementById('search-clear').addEventListener('click',function(){
+  document.getElementById('search-input').value='';
+  this.style.display='none';
+  hideResults();
+});
+document.getElementById('search-input').addEventListener('keydown',function(e){
+  if(e.key==='Enter')doSearch();
+});
+
+function doSearch(){
+  var q=document.getElementById('search-input').value.trim();
+  if(!q)return;
+
+  // إحداثيات مباشرة
+  var m=q.match(/(-?\d+\.?\d*)[,\s،]+(-?\d+\.?\d*)/);
+  if(m){
+    var lat=parseFloat(m[1]),lng=parseFloat(m[2]);
+    if(lat>=-90&&lat<=90&&lng>=-180&&lng<=180){
+      map.setView([lat,lng],15);
+      placePin(lat,lng,q);
+      reverseGeocode(lat,lng,function(n){selectedLabel=n;updatePinCard(lat,lng,n);});
+      hideResults();
+      showToast('success','<i class="fa-solid fa-location-dot"></i> تم تحديد الموقع');
+      return;
+    }
+  }
+
+  setSpinner(true,'جاري البحث...');
+  fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&q='+encodeURIComponent(q)+'&accept-language=ar,en',
+    {headers:{'User-Agent':'WolFoxGPS/4.0'}})
+  .then(function(r){return r.json();})
+  .then(function(data){
+    setSpinner(false);
+    if(!data||data.length===0){
+      showToast('error','<i class="fa-solid fa-circle-xmark"></i> لا توجد نتائج');
+      return;
+    }
+    showResults(data);
+  })
+  .catch(function(){
+    setSpinner(false);
+    showToast('error','<i class="fa-solid fa-wifi"></i> تعذر الاتصال بالشبكة');
+  });
+}
+
+function showResults(list){
+  var box=document.getElementById('results-box');
+  box.innerHTML='';
+  list.forEach(function(r){
+    var div=document.createElement('div');
+    div.className='res-item';
+    var name=r.display_name||'';
+    if(name.length>60)name=name.substring(0,57)+'...';
+    div.innerHTML='<i class="fa-solid fa-location-dot res-icon"></i><span>'+name+'</span>';
+    div.addEventListener('click',function(){
+      var lat=parseFloat(r.lat),lng=parseFloat(r.lon);
+      map.setView([lat,lng],15);
+      placePin(lat,lng,r.display_name);
+      hideResults();
+      document.getElementById('search-input').value='';
+      document.getElementById('search-clear').style.display='none';
+      showToast('success','<i class="fa-solid fa-location-dot"></i> '+name.substring(0,40));
+    });
+    box.appendChild(div);
+  });
+  box.style.display='block';
+}
+
+function hideResults(){document.getElementById('results-box').style.display='none';}
+
+// ══════════════════════════════════════════
+//  Mock Controls
+// ══════════════════════════════════════════
+function applyMock(){
+  if(selectedLat===null){showToast('error','<i class="fa-solid fa-ban"></i> لم يُحدد موقع');return;}
+  mockLat=selectedLat; mockLng=selectedLng; mockLabel=selectedLabel;
+  notifyAndroid('apply',{lat:mockLat,lng:mockLng,label:mockLabel});
+  closePinCard();
+  showToast('success','<i class="fa-solid fa-check-circle"></i> تم تطبيق الموقع — اضغط ابدأ للتفعيل');
+}
+
+function startMockFromBar(){
+  if(mockLat===null&&selectedLat!==null){mockLat=selectedLat;mockLng=selectedLng;mockLabel=selectedLabel;}
+  if(mockLat===null){showToast('error','<i class="fa-solid fa-ban"></i> حدد موقعاً أولاً');return;}
+  notifyAndroid('start',{lat:mockLat,lng:mockLng});
+  setMockStatus(true,mockLat,mockLng);
+}
+
+function stopMockFromBar(){
+  notifyAndroid('stop',{});
+  setMockStatus(false,null,null);
+}
+
+function saveFav(){
+  if(selectedLat===null)return;
+  notifyAndroid('save_favorite',{
+    lat:selectedLat,lng:selectedLng,
+    label:selectedLabel||(selectedLat.toFixed(5)+' , '+selectedLng.toFixed(5))
+  });
+  closePinCard();
+  showToast('success','<i class="fa-solid fa-star"></i> تم الحفظ في المفضلة');
+}
+
+// ══════════════════════════════════════════
+//  Status Update (يُستدعى من Android أيضاً)
+// ══════════════════════════════════════════
+function setMockStatus(active,lat,lng){
+  isMocking=active;
+  var icon  =document.getElementById('gps-icon');
+  var label =document.getElementById('status-label');
+  var badge =document.getElementById('coords-badge');
+  var sbGps =document.getElementById('sb-gps');
+  var sbText=document.getElementById('sb-text');
+  var sbCoords=document.getElementById('sb-coords');
+
+  if(active){
+    icon.className='fa-solid fa-location-dot active';
+    label.className='active'; label.textContent='● التزييف نشط';
+    sbGps.className='fa-solid fa-satellite-dish active';
+    sbText.style.color='var(--green)'; sbText.textContent='التزييف نشط';
+    if(lat&&lng){
+      var c=lat.toFixed(5)+' ، '+lng.toFixed(5);
+      badge.textContent=c; sbCoords.textContent=c;
+      // الدبوس الذهبي على الموقع المزيف
+      if(pinMarker)map.removeLayer(pinMarker);
+      pinMarker=L.marker([lat,lng],{icon:goldPin,zIndexOffset:100}).addTo(map);
+      map.setView([lat,lng],15);
+      mockLat=lat; mockLng=lng;
+    }
+    // النقطة الزرقاء تبقى على موقعها الحقيقي
+    updateRealDot();
+    showToast('success','<i class="fa-solid fa-location-dot"></i> تزييف الموقع نشط الآن ✅');
+  } else {
+    icon.className='fa-solid fa-location-dot inactive';
+    label.className='inactive'; label.textContent='○ التزييف متوقف';
+    badge.textContent='-- ، --';
+    sbGps.className='fa-solid fa-satellite-dish inactive';
+    sbText.style.color='var(--red)'; sbText.textContent='التزييف متوقف';
+    sbCoords.textContent='-- ، --';
+    // عند الإيقاف — اذهب للموقع الحقيقي
+    if(realLat&&realLng){
+      map.setView([realLat,realLng],15);
+      showToast('info','<i class="fa-solid fa-crosshairs"></i> عاد إلى الموقع الحقيقي');
+    } else {
+      showToast('info','<i class="fa-solid fa-stop"></i> تم إيقاف التزييف');
+    }
+  }
+  notifyAndroid('status_changed',{active:active,lat:lat||0,lng:lng||0});
+}
+
+// ══════════════════════════════════════════
+//  Bridge Android ↔ JS
+// ══════════════════════════════════════════
+window.wolfoxBridge = {
+  setMockStatus: function(active,lat,lng){ setMockStatus(active,lat,lng); },
+  loadFavorite:  function(lat,lng,label){ map.setView([lat,lng],15); placePin(lat,lng,label); showToast('info','<i class="fa-solid fa-star"></i> '+label); },
+  showToast:     function(type,msg){ showToast(type,msg); },
+  realLocation:  function(lat,lng){ realLat=lat; realLng=lng; updateRealDot(); }
+};
+
+function notifyAndroid(action,data){
+  try{
+    if(window.WolFoxAndroid){window.WolFoxAndroid.onMapEvent(action,JSON.stringify(data));}
+  }catch(e){}
+}
+
+// ══════════════════════════════════════════
+//  Toast System
+// ══════════════════════════════════════════
+function showToast(type,html){
+  var wrap=document.getElementById('toast-wrap');
+  var t=document.createElement('div');
+  t.className='toast '+type;
+  t.innerHTML=html;
+  wrap.appendChild(t);
+  setTimeout(function(){t.classList.add('show');},10);
+  setTimeout(function(){
+    t.classList.remove('show');
+    setTimeout(function(){if(t.parentNode)wrap.removeChild(t);},350);
+  },2800);
+}
+
+// ══════════════════════════════════════════
+//  Spinner
+// ══════════════════════════════════════════
+function setSpinner(show,text){
+  var s=document.getElementById('spinner');
+  s.style.display=show?'flex':'none';
+  if(text)document.getElementById('spinner-text').textContent=text;
+}
+
+// ══════════════════════════════════════════
+//  Init
+// ══════════════════════════════════════════
+startRealGPSTracking();
+</script>
+</body>
+</html>
