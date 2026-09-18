@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WolFox GPS Module</string>
+    <string name="module_desc">GPS Location Spoofer — LSPatch, no root</string>
+
+    <!-- التفعيل -->
+    <string name="license_title">WolFox GPS</string>
+    <string name="license_subtitle">أدخل كود التفعيل للمتابعة</string>
+    <string name="license_hint">XXXX-XXXX-XXXX-XXXX</string>
+    <string name="license_btn">تفعيل</string>
+    <string name="license_buy">لا يوجد كود؟ احصل على ترخيص من p3nd.fun</string>
+    <string name="license_success">✅ تم التفعيل بنجاح!</string>
+    <string name="license_invalid">❌ كود غير صحيح</string>
+    <string name="license_error">⚠️ تعذر الاتصال بالسيرفر</string>
+
+    <!-- اللوحة -->
+    <string name="panel_title">🦊 WolFox GPS</string>
+    <string name="btn_start">▶ ابدأ التزييف</string>
+    <string name="btn_stop">⏹ إيقاف</string>
+    <string name="btn_search">🔍 بحث</string>
+    <string name="btn_location">📍 موقعي</string>
+    <string name="btn_favorites">⭐ المفضلة</string>
+    <string name="btn_history">🕐 السجل</string>
+    <string name="btn_map">🗺 الخريطة</string>
+    <string name="btn_settings">⚙ الإعدادات</string>
+    <string name="btn_hide">إخفاء الأيقونة</string>
+    <string name="btn_close">إغلاق</string>
+    <string name="btn_save">حفظ</string>
+    <string name="btn_cancel">إلغاء</string>
+    <string name="btn_add">+ إضافة</string>
+    <string name="btn_delete">حذف</string>
+    <string name="btn_clear_all">مسح الكل</string>
+    <string name="btn_export">📤</string>
+    <string name="btn_import">📥</string>
+    <string name="btn_set_location">📍 تعيين الموقع</string>
+    <string name="btn_center">🎯 تمركز</string>
+
+    <!-- رسائل -->
+    <string name="mock_started">✅ تزييف الموقع نشط</string>
+    <string name="mock_stopped">⏹ تم إيقاف التزييف</string>
+    <string name="no_location">حدد موقعاً أولاً</string>
+    <string name="searching">جاري البحث...</string>
+    <string name="no_results">❌ لم يتم العثور على نتائج</string>
+    <string name="saved">✅ تم الحفظ</string>
+    <string name="deleted">✅ تم الحذف</string>
+    <string name="imported">✅ تم الاستيراد</string>
+    <string name="copied">✅ تم النسخ</string>
+    <string name="no_favorites">لا توجد مفضلة بعد</string>
+    <string name="no_history">لا يوجد سجل بعد</string>
+    <string name="delete_confirm">هل تريد الحذف؟</string>
+    <string name="clear_history_confirm">هل تريد مسح كل السجل؟</string>
+</resources>
