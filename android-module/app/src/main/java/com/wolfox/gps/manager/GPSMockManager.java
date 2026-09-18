@@ -109,9 +109,11 @@ public class GPSMockManager {
             loc.setBearingAccuracyDegrees(0.0f);
         }
 
-        // FIX: إخفاء علامة mock
-        try { loc.setIsFromMockProvider(false); }
-        catch (NoSuchMethodError | Exception ignored) {}
+        // API مخفية في بعض إصدارات Android؛ استخدم الانعكاس دون كسر البناء.
+        try {
+            Location.class.getDeclaredMethod("setIsFromMockProvider", boolean.class)
+                    .invoke(loc, false);
+        } catch (ReflectiveOperationException | SecurityException ignored) {}
 
         return loc;
     }
