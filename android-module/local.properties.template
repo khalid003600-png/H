@@ -1,0 +1,15 @@
+## local.properties — لا ترفع هذا الملف إلى Git
+## انسخ هذا الملف وأعد تسميته إلى local.properties
+
+# مسار Android SDK
+sdk.dir=/Users/USERNAME/Library/Android/sdk
+# أو على Linux:
+# sdk.dir=/home/USERNAME/Android/Sdk
+# أو على Windows:
+# sdk.dir=C\:\\Users\\USERNAME\\AppData\\Local\\Android\\Sdk
+
+# Keystore (للتوقيع المحلي — اختياري)
+# KEYSTORE_PATH=../wolfox.keystore
+# KEYSTORE_ALIAS=wolfox
+# KEYSTORE_PASS=yourpassword
+# KEY_PASS=yourpassword
