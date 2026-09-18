@@ -1,0 +1,49 @@
+// =====================================================
+//  WolFox GPS Module — build.gradle (app)
+// =====================================================
+
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.wolfox.gps'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.wolfox.gps"
+        minSdk 21
+        targetSdk 34
+        versionCode 200
+        versionName "2.0.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+        debug {
+            minifyEnabled false
+            debuggable true
+        }
+    }
+
+    // اسم APK الناتج
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "k7.gps.module-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+dependencies {
+    // LSPosed / Xposed API
+    compileOnly 'de.robv.android.xposed:api:82'
+    compileOnly 'de.robv.android.xposed:api:82:sources'
+}
