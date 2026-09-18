@@ -1,0 +1,10 @@
+{
+  "id": "com.wolfox.gps",
+  "name": "WolFox GPS Module",
+  "version": "2.0.0",
+  "versionCode": 200,
+  "description": "GPS Location Spoofer — no root, LSPatch only",
+  "author": "WolFox",
+  "minApi": 21,
+  "scope": ["k7.gps"]
+}
