@@ -192,7 +192,7 @@ public class MapDialog {
                         double lat   = data.getDouble("lat");
                         double lng   = data.getDouble("lng");
                         String label = data.optString("label", "موقع محفوظ");
-                        FavoriteLocation fav = new FavoriteLocation(lat, lng, label);
+                        FavoriteLocation fav = new FavoriteLocation(label, lat, lng);
                         WFStorage.getInstance(activity).addFavorite(fav);
                         activity.runOnUiThread(() ->
                             Toast.makeText(activity, "⭐ تم الحفظ: " + label,
